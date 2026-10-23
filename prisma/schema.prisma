@@ -1,0 +1,774 @@
+// Esquema de base de datos de Florece.
+// Las tablas y columnas se guardan en snake_case (@@map / @map).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum UserRole {
+  USER
+  PSYCHOLOGIST
+  ADMIN
+}
+
+enum AuthProvider {
+  GOOGLE
+  APPLE
+}
+
+enum Plan {
+  FREE
+  PREMIUM
+}
+
+enum FocusArea {
+  SELF_ESTEEM
+  ANXIETY
+  EMOTIONAL_REGULATION
+  SELF_CARE
+  RELATIONSHIPS
+  SELF_KNOWLEDGE
+}
+
+enum ConsentType {
+  TERMS
+  PRIVACY
+  SENSITIVE_DATA
+  AI_PROCESSING
+  COMMUNITY_RULES
+}
+
+enum AvatarSpecies {
+  BEAR
+  BUNNY
+  FOX
+  CAT
+  CAPYBARA
+}
+
+enum ItemCategory {
+  CLOTHING
+  ACCESSORY
+  FURNITURE
+  PLANT
+  BACKGROUND
+  DECORATION
+}
+
+enum SeedReason {
+  CHALLENGE
+  PURCHASE
+  BONUS
+  ADJUSTMENT
+}
+
+enum ChallengeCategory {
+  SELF_KNOWLEDGE
+  EMOTIONAL_SKILLS
+  SELF_CARE
+}
+
+enum EvidenceType {
+  TEXT
+  AUDIO
+  PHOTO
+  INTERACTIVE
+}
+
+enum DailyChallengeStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+}
+
+enum Emotion {
+  JOY
+  CALM
+  GRATITUDE
+  SADNESS
+  ANXIETY
+  ANGER
+  FRUSTRATION
+  TIREDNESS
+  NEUTRAL
+}
+
+enum ChatMode {
+  SUPPORT
+  SELF_REGULATION
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum RiskLevel {
+  NONE
+  LOW
+  MODERATE
+  HIGH
+  IMMINENT
+}
+
+enum RiskSource {
+  CHAT
+  JOURNAL
+  COMMUNITY
+  CALM_BUTTON
+}
+
+enum PostStatus {
+  VISIBLE
+  PENDING_REVIEW
+  HIDDEN
+  REMOVED
+}
+
+enum ReactionType {
+  HUG
+  SUPPORT
+  CELEBRATE
+}
+
+enum ReportReason {
+  HARASSMENT
+  SELF_HARM
+  SPAM
+  INAPPROPRIATE
+  OTHER
+}
+
+enum ReportStatus {
+  OPEN
+  ACTIONED
+  DISMISSED
+}
+
+enum SlotStatus {
+  OPEN
+  BOOKED
+  BLOCKED
+}
+
+enum AppointmentStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum AppointmentModality {
+  VIDEO
+  IN_PERSON
+}
+
+enum SubscriptionProvider {
+  APPLE
+  GOOGLE
+  REVENUECAT
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  GRACE_PERIOD
+  CANCELLED
+  EXPIRED
+}
+
+// ─────────────────────────────────────────────
+// Usuarios, autenticación y consentimientos
+// ─────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  passwordHash    String?   @map("password_hash") // null si solo entra con Google/Apple
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  role            UserRole  @default(USER)
+  birthDate       DateTime? @map("birth_date") @db.Date // para validar mayoría de edad
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  identities       AuthIdentity[]
+  sessions         Session[]
+  profile          Profile?
+  consents         Consent[]
+  avatar           Avatar?
+  items            UserItem[]
+  seedTransactions SeedTransaction[]
+  dailyChallenges  DailyChallenge[]
+  journalEntries   JournalEntry[]
+  moodLogs         MoodLog[]
+  conversations    ChatConversation[]
+  chatUsage        ChatUsage[]
+  riskEvents       RiskEvent[]        @relation("RiskEventUser")
+  reviewedRisks    RiskEvent[]        @relation("RiskEventReviewer")
+  wellbeingPlan    WellbeingPlan?
+  posts            Post[]
+  reactions        PostReaction[]
+  reportsMade      Report[]           @relation("ReportReporter")
+  reportsResolved  Report[]           @relation("ReportResolver")
+  psychologist     Psychologist?
+  appointments     Appointment[]
+  sharedSummaries  SharedSummary[]
+  subscriptions    Subscription[]
+
+  @@map("users")
+}
+
+model AuthIdentity {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  provider       AuthProvider
+  providerUserId String       @map("provider_user_id")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+  @@map("auth_identities")
+}
+
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  refreshTokenHash String    @unique @map("refresh_token_hash")
+  deviceName       String?   @map("device_name")
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Profile {
+  userId                String      @id @map("user_id") @db.Uuid
+  displayName           String      @map("display_name")
+  focusAreas            FocusArea[] @map("focus_areas")
+  plan                  Plan        @default(FREE)
+  premiumUntil          DateTime?   @map("premium_until") @db.Timestamptz(6)
+  seedsBalance          Int         @default(0) @map("seeds_balance")
+  timezone              String      @default("America/Mexico_City")
+  countryCode           String?     @map("country_code") @db.Char(2) // para mostrar recursos de crisis locales
+  onboardingCompletedAt DateTime?   @map("onboarding_completed_at") @db.Timestamptz(6)
+  updatedAt             DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Consent {
+  id         String      @id @default(uuid()) @db.Uuid
+  userId     String      @map("user_id") @db.Uuid
+  type       ConsentType
+  version    String
+  acceptedAt DateTime    @default(now()) @map("accepted_at") @db.Timestamptz(6)
+  revokedAt  DateTime?   @map("revoked_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@map("consents")
+}
+
+model Subscription {
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @map("user_id") @db.Uuid
+  provider         SubscriptionProvider
+  productId        String               @map("product_id")
+  externalId       String               @unique @map("external_id")
+  status           SubscriptionStatus
+  currentPeriodEnd DateTime             @map("current_period_end") @db.Timestamptz(6)
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("subscriptions")
+}
+
+// ─────────────────────────────────────────────
+// Avatar, jardín, tienda y semillas
+// ─────────────────────────────────────────────
+
+model Avatar {
+  id        String        @id @default(uuid()) @db.Uuid
+  userId    String        @unique @map("user_id") @db.Uuid
+  species   AvatarSpecies
+  name      String
+  color     String?
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("avatars")
+}
+
+model Item {
+  id          String       @id @default(uuid()) @db.Uuid
+  slug        String       @unique
+  name        String
+  category    ItemCategory
+  priceSeeds  Int          @map("price_seeds")
+  premiumOnly Boolean      @default(false) @map("premium_only")
+  imageUrl    String?      @map("image_url")
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owners UserItem[]
+
+  @@map("items")
+}
+
+model UserItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  itemId     String   @map("item_id") @db.Uuid
+  equipped   Boolean  @default(false) // ropa/accesorio puesto en el avatar
+  acquiredAt DateTime @default(now()) @map("acquired_at") @db.Timestamptz(6)
+
+  user       User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item       Item              @relation(fields: [itemId], references: [id])
+  placements GardenPlacement[]
+
+  @@unique([userId, itemId])
+  @@map("user_items")
+}
+
+model GardenPlacement {
+  id         String @id @default(uuid()) @db.Uuid
+  userItemId String @map("user_item_id") @db.Uuid
+  x          Float
+  y          Float
+  rotation   Float  @default(0)
+  layer      Int    @default(0)
+
+  userItem UserItem @relation(fields: [userItemId], references: [id], onDelete: Cascade)
+
+  @@index([userItemId])
+  @@map("garden_placements")
+}
+
+// Historial de semillas: positivo = ganadas, negativo = gastadas.
+// profiles.seeds_balance debe actualizarse en la misma transacción.
+model SeedTransaction {
+  id          String     @id @default(uuid()) @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  amount      Int
+  reason      SeedReason
+  referenceId String?    @map("reference_id") @db.Uuid
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("seed_transactions")
+}
+
+// ─────────────────────────────────────────────
+// Retos
+// ─────────────────────────────────────────────
+
+model Challenge {
+  id               String            @id @default(uuid()) @db.Uuid
+  slug             String            @unique
+  title            String
+  description      String
+  category         ChallengeCategory
+  focusAreas       FocusArea[]       @map("focus_areas")
+  evidenceType     EvidenceType      @map("evidence_type")
+  reflectionPrompt String?           @map("reflection_prompt") // «¿Qué observaste en ti después de realizarlo?»
+  seedsReward      Int               @map("seeds_reward")
+  durationMinutes  Int?              @map("duration_minutes")
+  active           Boolean           @default(true)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  assignments DailyChallenge[]
+
+  @@map("challenges")
+}
+
+model DailyChallenge {
+  id           String               @id @default(uuid()) @db.Uuid
+  userId       String               @map("user_id") @db.Uuid
+  challengeId  String               @map("challenge_id") @db.Uuid
+  date         DateTime             @db.Date
+  status       DailyChallengeStatus @default(PENDING)
+  completedAt  DateTime?            @map("completed_at") @db.Timestamptz(6)
+  seedsAwarded Int                  @default(0) @map("seeds_awarded")
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge Challenge          @relation(fields: [challengeId], references: [id])
+  evidence  ChallengeEvidence?
+
+  @@unique([userId, challengeId, date])
+  @@index([userId, date])
+  @@map("daily_challenges")
+}
+
+model ChallengeEvidence {
+  id               String       @id @default(uuid()) @db.Uuid
+  dailyChallengeId String       @unique @map("daily_challenge_id") @db.Uuid
+  type             EvidenceType
+  textContent      String?      @map("text_content")
+  mediaKey         String?      @map("media_key") // ruta del audio/foto en el almacenamiento privado
+  mediaDurationSec Int?         @map("media_duration_sec")
+  reflection       String?
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  dailyChallenge DailyChallenge @relation(fields: [dailyChallengeId], references: [id], onDelete: Cascade)
+
+  @@map("challenge_evidences")
+}
+
+// ─────────────────────────────────────────────
+// Diario y registro emocional
+// ─────────────────────────────────────────────
+
+model JournalPrompt {
+  id        String     @id @default(uuid()) @db.Uuid
+  text      String
+  focusArea FocusArea? @map("focus_area")
+  active    Boolean    @default(true)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  entries JournalEntry[]
+
+  @@map("journal_prompts")
+}
+
+model JournalEntry {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  promptId         String?   @map("prompt_id") @db.Uuid
+  title            String?
+  contentEncrypted String    @map("content_encrypted") // cifrado en el backend antes de guardarse
+  theme            String?
+  pageColor        String?   @map("page_color")
+  aiReflection     String?   @map("ai_reflection")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prompt JournalPrompt? @relation(fields: [promptId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("journal_entries")
+}
+
+model MoodLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  date      DateTime @db.Date
+  emotion   Emotion
+  intensity Int      @db.SmallInt // 1 a 5
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@map("mood_logs")
+}
+
+// ─────────────────────────────────────────────
+// Chat con IA (Groq) y seguridad
+// ─────────────────────────────────────────────
+
+model ChatConversation {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  mode      ChatMode  @default(SUPPORT)
+  title     String?
+  startedAt DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(6)
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, startedAt])
+  @@map("chat_conversations")
+}
+
+model ChatMessage {
+  id             String     @id @default(uuid()) @db.Uuid
+  conversationId String     @map("conversation_id") @db.Uuid
+  role           ChatRole
+  content        String
+  model          String? // modelo de Groq que respondió
+  tokensIn       Int?       @map("tokens_in")
+  tokensOut      Int?       @map("tokens_out")
+  riskLevel      RiskLevel? @map("risk_level")
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+// Contador diario para los límites del plan (p. ej. 10 gratis / 30 premium).
+// Los mensajes en situación de riesgo no deben contar contra el límite.
+model ChatUsage {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  date          DateTime @db.Date
+  messagesCount Int      @default(0) @map("messages_count")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("chat_usage")
+}
+
+model RiskEvent {
+  id                   String     @id @default(uuid()) @db.Uuid
+  userId               String     @map("user_id") @db.Uuid
+  source               RiskSource
+  sourceId             String?    @map("source_id") @db.Uuid
+  level                RiskLevel
+  detector             String? // modelo/versión que lo detectó
+  actionTaken          String?    @map("action_taken")
+  crisisResourcesShown Boolean    @default(false) @map("crisis_resources_shown")
+  reviewedAt           DateTime?  @map("reviewed_at") @db.Timestamptz(6)
+  reviewedById         String?    @map("reviewed_by_id") @db.Uuid
+  notes                String?
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user       User  @relation("RiskEventUser", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedBy User? @relation("RiskEventReviewer", fields: [reviewedById], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([level, reviewedAt])
+  @@map("risk_events")
+}
+
+model CrisisResource {
+  id           String   @id @default(uuid()) @db.Uuid
+  countryCode  String   @map("country_code") @db.Char(2)
+  name         String
+  phone        String?
+  url          String?
+  description  String?
+  available24h Boolean  @default(false) @map("available_24h")
+  active       Boolean  @default(true)
+  sortOrder    Int      @default(0) @map("sort_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([countryCode, active])
+  @@map("crisis_resources")
+}
+
+// ─────────────────────────────────────────────
+// Plan personal de bienestar (también disponible sin conexión en la app)
+// ─────────────────────────────────────────────
+
+model WellbeingPlan {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @map("user_id") @db.Uuid
+  helpfulActivities String[] @map("helpful_activities")
+  warningSigns      String[] @map("warning_signs")
+  copingStrategies  String[] @map("coping_strategies")
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contacts SupportContact[]
+
+  @@map("wellbeing_plans")
+}
+
+model SupportContact {
+  id           String  @id @default(uuid()) @db.Uuid
+  planId       String  @map("plan_id") @db.Uuid
+  name         String
+  relationship String?
+  phone        String?
+
+  plan WellbeingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("support_contacts")
+}
+
+// ─────────────────────────────────────────────
+// Comunidad
+// ─────────────────────────────────────────────
+
+model Room {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  icon        String?
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  posts Post[]
+
+  @@map("rooms")
+}
+
+model Post {
+  id        String     @id @default(uuid()) @db.Uuid
+  roomId    String     @map("room_id") @db.Uuid
+  authorId  String     @map("author_id") @db.Uuid
+  parentId  String?    @map("parent_id") @db.Uuid // respuestas
+  content   String
+  anonymous Boolean    @default(false)
+  status    PostStatus @default(VISIBLE)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  room      Room           @relation(fields: [roomId], references: [id])
+  author    User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent    Post?          @relation("PostReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Post[]         @relation("PostReplies")
+  reactions PostReaction[]
+  reports   Report[]
+
+  @@index([roomId, createdAt])
+  @@index([parentId])
+  @@map("posts")
+}
+
+model PostReaction {
+  postId    String       @map("post_id") @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  type      ReactionType
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@map("post_reactions")
+}
+
+model Report {
+  id           String       @id @default(uuid()) @db.Uuid
+  reporterId   String       @map("reporter_id") @db.Uuid
+  postId       String       @map("post_id") @db.Uuid
+  reason       ReportReason
+  details      String?
+  status       ReportStatus @default(OPEN)
+  resolvedById String?      @map("resolved_by_id") @db.Uuid
+  resolvedAt   DateTime?    @map("resolved_at") @db.Timestamptz(6)
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  reporter   User  @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  resolvedBy User? @relation("ReportResolver", fields: [resolvedById], references: [id])
+  post       Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@map("reports")
+}
+
+// ─────────────────────────────────────────────
+// Psicólogos y citas
+// ─────────────────────────────────────────────
+
+model Psychologist {
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @unique @map("user_id") @db.Uuid
+  fullName          String    @map("full_name")
+  licenseNumber     String    @map("license_number")
+  specialties       String[]
+  bio               String?
+  photoUrl          String?   @map("photo_url")
+  sessionPriceCents Int       @map("session_price_cents")
+  currency          String    @default("MXN") @db.Char(3)
+  sessionMinutes    Int       @default(50) @map("session_minutes")
+  verifiedAt        DateTime? @map("verified_at") @db.Timestamptz(6)
+  active            Boolean   @default(true)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots           AvailabilitySlot[]
+  appointments    Appointment[]
+  sharedSummaries SharedSummary[]
+
+  @@map("psychologists")
+}
+
+model AvailabilitySlot {
+  id             String     @id @default(uuid()) @db.Uuid
+  psychologistId String     @map("psychologist_id") @db.Uuid
+  startsAt       DateTime   @map("starts_at") @db.Timestamptz(6)
+  endsAt         DateTime   @map("ends_at") @db.Timestamptz(6)
+  status         SlotStatus @default(OPEN)
+
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+  appointment  Appointment?
+
+  @@unique([psychologistId, startsAt])
+  @@map("availability_slots")
+}
+
+model Appointment {
+  id                   String              @id @default(uuid()) @db.Uuid
+  patientId            String              @map("patient_id") @db.Uuid
+  psychologistId       String              @map("psychologist_id") @db.Uuid
+  slotId               String?             @unique @map("slot_id") @db.Uuid
+  startsAt             DateTime            @map("starts_at") @db.Timestamptz(6)
+  endsAt               DateTime            @map("ends_at") @db.Timestamptz(6)
+  status               AppointmentStatus   @default(PENDING_PAYMENT)
+  modality             AppointmentModality @default(VIDEO)
+  meetingUrl           String?             @map("meeting_url")
+  priceCents           Int                 @map("price_cents")
+  currency             String              @db.Char(3)
+  paymentRef           String?             @map("payment_ref") // id del pago en Stripe
+  notesForPsychologist String?             @map("notes_for_psychologist")
+  cancelledAt          DateTime?           @map("cancelled_at") @db.Timestamptz(6)
+  cancelReason         String?             @map("cancel_reason")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  patient      User              @relation(fields: [patientId], references: [id])
+  psychologist Psychologist      @relation(fields: [psychologistId], references: [id])
+  slot         AvailabilitySlot? @relation(fields: [slotId], references: [id])
+
+  @@index([patientId, startsAt])
+  @@index([psychologistId, startsAt])
+  @@map("appointments")
+}
+
+// Resumen mensual que la persona decide compartir con su psicólogo.
+// Los profesionales nunca tienen acceso automático al diario ni al chat.
+model SharedSummary {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @map("user_id") @db.Uuid
+  psychologistId String?   @map("psychologist_id") @db.Uuid
+  periodStart    DateTime  @map("period_start") @db.Date
+  periodEnd      DateTime  @map("period_end") @db.Date
+  content        Json
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  psychologist Psychologist? @relation(fields: [psychologistId], references: [id])
+
+  @@index([userId])
+  @@map("shared_summaries")
+}

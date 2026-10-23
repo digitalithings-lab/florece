@@ -1,0 +1,20 @@
+{
+  "name": "florece-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend de Florece",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "postinstall": "prisma generate",
+    "start": "prisma migrate deploy && node src/index.js",
+    "dev": "node --watch src/index.js",
+    "db:validate": "prisma validate"
+  },
+  "dependencies": {
+    "@prisma/client": "6.16.2",
+    "prisma": "6.16.2"
+  }
+}
