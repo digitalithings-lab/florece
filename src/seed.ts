@@ -3,7 +3,7 @@
 //
 // Las líneas de ayuda en crisis (crisis_resources) NO se cargan aquí a propósito:
 // deben añadirse por país y verificarse con un profesional antes del lanzamiento.
-import { ChallengeCategory, EvidenceType, FocusArea, PrismaClient } from "@prisma/client";
+import { ChallengeCategory, EvidenceType, FocusArea, ItemCategory, PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -148,7 +148,34 @@ const journalPrompts: { text: string; focusArea: FocusArea | null }[] = [
   { text: "¿Cómo describirías tu día en tres palabras?", focusArea: null },
 ];
 
+// Catálogo de la tienda del jardín. Los emojis son provisionales hasta tener ilustraciones.
+const items: { slug: string; name: string; category: ItemCategory; emoji: string; priceSeeds: number; premiumOnly?: boolean }[] = [
+  { slug: "tulipan", name: "Tulipán", category: ItemCategory.PLANT, emoji: "🌷", priceSeeds: 15 },
+  { slug: "margarita", name: "Margarita", category: ItemCategory.PLANT, emoji: "🌼", priceSeeds: 15 },
+  { slug: "girasol", name: "Girasol", category: ItemCategory.PLANT, emoji: "🌻", priceSeeds: 20 },
+  { slug: "rosa", name: "Rosa", category: ItemCategory.PLANT, emoji: "🌹", priceSeeds: 25 },
+  { slug: "flor-de-cerezo", name: "Flor de cerezo", category: ItemCategory.PLANT, emoji: "🌸", priceSeeds: 30 },
+  { slug: "cactus", name: "Cactus", category: ItemCategory.PLANT, emoji: "🌵", priceSeeds: 25 },
+  { slug: "maceta", name: "Planta en maceta", category: ItemCategory.PLANT, emoji: "🪴", priceSeeds: 30 },
+  { slug: "arbol", name: "Árbol", category: ItemCategory.PLANT, emoji: "🌳", priceSeeds: 50 },
+  { slug: "pino", name: "Pino", category: ItemCategory.PLANT, emoji: "🌲", priceSeeds: 50 },
+  { slug: "palmera", name: "Palmera", category: ItemCategory.PLANT, emoji: "🌴", priceSeeds: 70 },
+  { slug: "hongo", name: "Hongo", category: ItemCategory.DECORATION, emoji: "🍄", priceSeeds: 20 },
+  { slug: "mariposa", name: "Mariposa", category: ItemCategory.DECORATION, emoji: "🦋", priceSeeds: 35 },
+  { slug: "abeja", name: "Abejita", category: ItemCategory.DECORATION, emoji: "🐝", priceSeeds: 35 },
+  { slug: "farol", name: "Farol", category: ItemCategory.DECORATION, emoji: "🏮", priceSeeds: 40 },
+  { slug: "banca", name: "Banca", category: ItemCategory.FURNITURE, emoji: "🪑", priceSeeds: 45 },
+  { slug: "fuente", name: "Fuente", category: ItemCategory.FURNITURE, emoji: "⛲", priceSeeds: 100 },
+  { slug: "casita", name: "Casita", category: ItemCategory.FURNITURE, emoji: "🏡", priceSeeds: 150 },
+  { slug: "arcoiris", name: "Arcoíris", category: ItemCategory.DECORATION, emoji: "🌈", priceSeeds: 200, premiumOnly: true },
+];
+
 async function main() {
+  for (const [index, item] of items.entries()) {
+    const data = { ...item, premiumOnly: item.premiumOnly ?? false, sortOrder: index };
+    await prisma.item.upsert({ where: { slug: item.slug }, create: data, update: data });
+  }
+
   for (const challenge of challenges) {
     await prisma.challenge.upsert({
       where: { slug: challenge.slug },
@@ -164,7 +191,9 @@ async function main() {
     }
   }
 
-  console.log(`Seed listo: ${challenges.length} retos, ${journalPrompts.length} preguntas guiadas`);
+  console.log(
+    `Seed listo: ${challenges.length} retos, ${journalPrompts.length} preguntas guiadas, ${items.length} objetos del jardín`,
+  );
 }
 
 main()

@@ -53,6 +53,10 @@ Todas exigen `Authorization: Bearer <accessToken>`, salvo las marcadas como púb
 | GET / PATCH / DELETE | `/journal/:id` | Ver / editar / borrar una entrada |
 | POST | `/journal/:id/reflection` | Reflexión de la IA sobre la entrada |
 | GET / POST | `/moods` | Calendario del mes (`?month=YYYY-MM`) / registrar emoción |
+| GET | `/garden` | Jardín: objetos, posiciones (cuadrícula 5×6) y semillas |
+| GET | `/garden/shop` | Tienda: catálogo con precio, si ya lo tienes y si te alcanza |
+| POST | `/garden/shop/:itemId/buy` | Comprar un objeto con semillas |
+| PUT / DELETE | `/garden/items/:userItemId/placement` | Colocar o mover (`{x, y}`) / quitar del jardín |
 | GET | `/chat/usage` | Mensajes usados hoy y límite del plan |
 | GET / POST | `/chat/conversations` | Listar / crear conversaciones |
 | GET / POST | `/chat/conversations/:id/messages` | Historial / enviar mensaje |

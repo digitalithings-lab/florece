@@ -7,6 +7,7 @@ import { ChallengesModule } from "./challenges/challenges.module";
 import { ChatModule } from "./chat/chat.module";
 import { JwtAuthGuard } from "./common/jwt-auth.guard";
 import { config } from "./config";
+import { GardenModule } from "./garden/garden.module";
 import { GroqModule } from "./groq/groq.module";
 import { HealthController } from "./health/health.controller";
 import { JournalModule } from "./journal/journal.module";
@@ -30,6 +31,7 @@ import { SafetyModule } from "./safety/safety.module";
     ChallengesModule,
     JournalModule,
     ChatModule,
+    GardenModule,
   ],
   controllers: [HealthController],
   providers: [
