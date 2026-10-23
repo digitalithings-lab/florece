@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import {
+  CareLinkStatus,
   Challenge,
   ChallengeCategory,
   DailyChallengeStatus,
@@ -21,6 +22,8 @@ const DAILY_CATEGORIES: ChallengeCategory[] = [
   ChallengeCategory.SELF_CARE,
 ];
 const AVOID_REPEAT_DAYS = 7;
+// Sin psicólogo vinculado, cada persona recibe 3 retos automáticos al día.
+const DEFAULT_AUTO_CHALLENGES = 3;
 
 type DailyWithRelations = Prisma.DailyChallengeGetPayload<{ include: { challenge: true; evidence: true } }>;
 
@@ -35,19 +38,77 @@ export class ChallengesService {
     const profile = await this.prisma.profile.findUniqueOrThrow({ where: { userId } });
     const date = localDate(profile.timezone);
 
+    // Con psicólogo vinculado, él decide cuántos retos automáticos recibe la persona (0 a 6).
+    const link = await this.prisma.careLink.findFirst({
+      where: { patientId: userId, status: CareLinkStatus.ACTIVE },
+      include: { psychologist: true },
+    });
+    const autoCount = link ? link.autoChallengesPerDay : DEFAULT_AUTO_CHALLENGES;
+
     let items = await this.findForDate(userId, date);
-    if (items.length === 0) {
-      await this.assign(userId, profile.focusAreas, date);
+    if (items.length === 0 && autoCount > 0) {
+      await this.assign(userId, profile.focusAreas, date, autoCount);
       items = await this.findForDate(userId, date);
     }
 
+    const routines = await this.routinesForDate(userId, date);
+    const routinesDone = routines.filter((r) => r.completions.length > 0).length;
+
     return {
       date: toDateString(date),
-      completed: items.filter((i) => i.status === DailyChallengeStatus.COMPLETED).length,
-      total: items.length,
+      completed: items.filter((i) => i.status === DailyChallengeStatus.COMPLETED).length + routinesDone,
+      total: items.length + routines.length,
       seedsBalance: profile.seedsBalance,
+      psychologistName: link?.psychologist.fullName ?? null,
+      routines: routines.map((r) => this.formatRoutine(r)),
       items: items.map((i) => this.format(i)),
     };
+  }
+
+  // Reto asignado por el psicólogo para hoy.
+  async completeRoutine(userId: string, routineId: string, dto: CompleteChallengeDto) {
+    const profile = await this.prisma.profile.findUniqueOrThrow({ where: { userId } });
+    const date = localDate(profile.timezone);
+    const routine = (await this.routinesForDate(userId, date)).find((r) => r.id === routineId);
+    if (!routine) throw new NotFoundException("Este reto no te toca hoy");
+    if (routine.completions.length > 0) throw new ConflictException("Ya completaste este reto hoy");
+
+    this.validateEvidence(routine, dto);
+
+    const [completion, updatedProfile] = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.routineCompletion.create({
+        data: {
+          routineId,
+          date,
+          textContent: dto.textContent?.trim() || null,
+          reflection: dto.reflection?.trim() || null,
+        },
+      });
+      await tx.seedTransaction.create({
+        data: { userId, amount: routine.seedsReward, reason: SeedReason.CHALLENGE, referenceId: created.id },
+      });
+      const updated = await tx.profile.update({ where: { userId }, data: { seedsBalance: { increment: routine.seedsReward } } });
+      return [created, updated] as const;
+    }).catch((err) => {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        throw new ConflictException("Ya completaste este reto hoy");
+      }
+      throw err;
+    });
+
+    // El nivel de riesgo queda guardado con la respuesta para que el psicólogo lo vea.
+    const text = [dto.textContent, dto.reflection].filter((t) => t?.trim()).join("\n");
+    let support = null;
+    if (text) {
+      const assessment = await this.safety.assess(text);
+      await this.prisma.routineCompletion.update({ where: { id: completion.id }, data: { riskLevel: assessment.level } });
+      if (this.safety.shouldShowResources(assessment.level)) {
+        await this.safety.record(userId, RiskSource.ROUTINE, completion.id, assessment, "resources_shown");
+        support = { riskLevel: assessment.level, ...(await this.safety.support(assessment.level, profile.countryCode)) };
+      }
+    }
+
+    return { seedsEarned: routine.seedsReward, seedsBalance: updatedProfile.seedsBalance, support };
   }
 
   async complete(userId: string, dailyChallengeId: string, dto: CompleteChallengeDto) {
@@ -150,7 +211,7 @@ export class ChallengesService {
 
   // Asigna los retos del día. El bloqueo evita que dos peticiones simultáneas
   // asignen dos juegos distintos de retos para el mismo día.
-  private async assign(userId: string, focusAreas: FocusArea[], date: Date) {
+  private async assign(userId: string, focusAreas: FocusArea[], date: Date, count: number) {
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`daily:${userId}:${toDateString(date)}`}))`;
 
@@ -166,13 +227,18 @@ export class ChallengesService {
       ]);
       const recentIds = new Set(recent.map((r) => r.challengeId));
 
-      const picks = DAILY_CATEGORIES.map((category) =>
-        this.pick(
-          catalog.filter((c) => c.category === category),
-          recentIds,
-          focusAreas,
-        ),
-      ).filter((c): c is Challenge => c !== null);
+      // Se reparten las categorías en orden (autoconocimiento, habilidades, autocuidado, …)
+      // sin repetir un mismo reto en el día.
+      const picks: Challenge[] = [];
+      for (let i = 0; i < count; i++) {
+        const category = DAILY_CATEGORIES[i % DAILY_CATEGORIES.length];
+        const taken = new Set(picks.map((p) => p.id));
+        const candidates = catalog.filter((c) => !taken.has(c.id));
+        const choice =
+          this.pick(candidates.filter((c) => c.category === category), recentIds, focusAreas) ??
+          this.pick(candidates, recentIds, focusAreas);
+        if (choice) picks.push(choice);
+      }
 
       await tx.dailyChallenge.createMany({
         data: picks.map((c) => ({ userId, challengeId: c.id, date })),
@@ -209,7 +275,37 @@ export class ChallengesService {
   }
 
   // No basta con presionar «Completado»: cada tipo de reto pide una evidencia mínima.
-  private validateEvidence(challenge: Challenge, dto: CompleteChallengeDto) {
+  // Retos del psicólogo que le tocan a la persona en esa fecha (según el día de la semana).
+  private async routinesForDate(userId: string, date: Date) {
+    const routines = await this.prisma.routine.findMany({
+      where: {
+        patientId: userId,
+        active: true,
+        startDate: { lte: date },
+        OR: [{ endDate: null }, { endDate: { gte: date } }],
+      },
+      include: { completions: { where: { date } }, psychologist: { select: { fullName: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    return routines.filter((r) => r.weekdays.includes(date.getUTCDay()));
+  }
+
+  private formatRoutine(r: Awaited<ReturnType<ChallengesService["routinesForDate"]>>[number]) {
+    const completion = r.completions[0] ?? null;
+    return {
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      evidenceType: r.evidenceType,
+      reflectionPrompt: r.reflectionPrompt,
+      seedsReward: r.seedsReward,
+      psychologistName: r.psychologist.fullName,
+      status: completion ? DailyChallengeStatus.COMPLETED : DailyChallengeStatus.PENDING,
+      completedAt: completion?.completedAt ?? null,
+    };
+  }
+
+  private validateEvidence(challenge: Pick<Challenge, "evidenceType">, dto: CompleteChallengeDto) {
     const hasText = (value?: string) => (value?.trim().length ?? 0) >= 3;
 
     switch (challenge.evidenceType) {

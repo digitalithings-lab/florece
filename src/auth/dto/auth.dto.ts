@@ -51,6 +51,41 @@ export class RegisterDto {
   countryCode?: string;
 }
 
+export class RegisterPsychologistDto {
+  @Transform(lowercaseTrim)
+  @IsEmail({}, { message: "El correo no es válido" })
+  email: string;
+
+  @IsString()
+  @MinLength(8, { message: "La contraseña debe tener al menos 8 caracteres" })
+  @MaxLength(128)
+  password: string;
+
+  @IsString()
+  @Length(3, 80)
+  fullName: string;
+
+  @IsString()
+  @Length(3, 40, { message: "Escribe tu número de cédula profesional" })
+  licenseNumber: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(60, { each: true })
+  specialties?: string[];
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
+  // Deben incluir TERMS y PRIVACY.
+  @IsArray()
+  @ArrayUnique()
+  @IsEnum(ConsentType, { each: true })
+  consents: ConsentType[];
+}
+
 export class LoginDto {
   @Transform(lowercaseTrim)
   @IsEmail({}, { message: "El correo no es válido" })

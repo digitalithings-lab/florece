@@ -6,12 +6,13 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
-import { ConsentType, Prisma, User } from "@prisma/client";
+import { ConsentType, Prisma, User, UserRole } from "@prisma/client";
 import { hashPassword, randomToken, sha256, verifyPassword } from "../common/crypto";
 import { ageOn, dateFromString, isValidTimezone } from "../common/dates";
+import { generateLinkCode } from "../common/link-code";
 import { config } from "../config";
 import { PrismaService } from "../prisma/prisma.service";
-import { LoginDto, RegisterDto } from "./dto/auth.dto";
+import { LoginDto, RegisterDto, RegisterPsychologistDto } from "./dto/auth.dto";
 
 const REQUIRED_CONSENTS: ConsentType[] = [ConsentType.TERMS, ConsentType.PRIVACY, ConsentType.SENSITIVE_DATA];
 const MINIMUM_AGE = 18;
@@ -76,6 +77,55 @@ export class AuthService {
     }
   }
 
+  // Registro desde el panel web. El psicólogo puede trabajar de inmediato;
+  // un administrador puede suspenderlo después si hace falta.
+  async registerPsychologist(dto: RegisterPsychologistDto, deviceName?: string) {
+    const missing = [ConsentType.TERMS, ConsentType.PRIVACY].filter((type) => !dto.consents.includes(type));
+    if (missing.length > 0) {
+      throw new BadRequestException(`Faltan consentimientos obligatorios: ${missing.join(", ")}`);
+    }
+    const timezone = dto.timezone ?? DEFAULT_TIMEZONE;
+    if (!isValidTimezone(timezone)) {
+      throw new BadRequestException("La zona horaria no es válida");
+    }
+
+    const passwordHash = await hashPassword(dto.password);
+
+    // Reintenta si el código aleatorio ya existe (muy improbable).
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const user = await this.prisma.user.create({
+          data: {
+            email: dto.email,
+            passwordHash,
+            role: UserRole.PSYCHOLOGIST,
+            profile: { create: { displayName: dto.fullName.trim(), timezone } },
+            consents: { create: dto.consents.map((type) => ({ type, version: config.consentVersion })) },
+            psychologist: {
+              create: {
+                fullName: dto.fullName.trim(),
+                licenseNumber: dto.licenseNumber.trim(),
+                specialties: dto.specialties?.map((s) => s.trim()).filter(Boolean) ?? [],
+                sessionPriceCents: 0,
+                timezone,
+                linkCode: generateLinkCode(),
+              },
+            },
+          },
+        });
+        return this.issueTokens(user, deviceName);
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+          const target = String(err.meta?.target ?? "");
+          if (target.includes("email")) throw new ConflictException("Ya existe una cuenta con ese correo");
+          continue; // choque de código: se genera otro
+        }
+        throw err;
+      }
+    }
+    throw new ConflictException("No pudimos crear la cuenta. Inténtalo de nuevo.");
+  }
+
   async login(dto: LoginDto, deviceName?: string) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
 
@@ -131,6 +181,11 @@ export class AuthService {
   }
 
   private async issueTokens(user: User, deviceName?: string) {
+    // Los correos de ADMIN_EMAILS obtienen el rol de administración al iniciar sesión.
+    if (config.adminEmails.includes(user.email) && user.role !== UserRole.ADMIN) {
+      user = await this.prisma.user.update({ where: { id: user.id }, data: { role: UserRole.ADMIN } });
+    }
+
     const refreshToken = randomToken();
     const expiresAt = new Date(Date.now() + config.refreshTokenTtlDays * 24 * 60 * 60 * 1000);
 

@@ -176,12 +176,9 @@ async function main() {
     await prisma.item.upsert({ where: { slug: item.slug }, create: data, update: data });
   }
 
+  // Solo crea los que falten: el catálogo se edita desde el panel de administración.
   for (const challenge of challenges) {
-    await prisma.challenge.upsert({
-      where: { slug: challenge.slug },
-      create: challenge,
-      update: challenge,
-    });
+    await prisma.challenge.upsert({ where: { slug: challenge.slug }, create: challenge, update: {} });
   }
 
   for (const prompt of journalPrompts) {

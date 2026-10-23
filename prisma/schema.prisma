@@ -127,6 +127,7 @@ enum RiskSource {
   COMMUNITY
   CALM_BUTTON
   CHALLENGE
+  ROUTINE
 }
 
 enum PostStatus {
@@ -162,7 +163,13 @@ enum SlotStatus {
   BLOCKED
 }
 
+enum CareLinkStatus {
+  ACTIVE
+  ENDED
+}
+
 enum AppointmentStatus {
+  REQUESTED // la persona pidió la cita; falta que el psicólogo la confirme
   PENDING_PAYMENT
   CONFIRMED
   CANCELLED
@@ -224,6 +231,8 @@ model User {
   reportsResolved  Report[]           @relation("ReportResolver")
   psychologist     Psychologist?
   appointments     Appointment[]
+  careLinks        CareLink[]         @relation("PatientCareLinks")
+  routines         Routine[]          @relation("PatientRoutines")
   sharedSummaries  SharedSummary[]
   subscriptions    Subscription[]
 
@@ -705,13 +714,111 @@ model Psychologist {
   verifiedAt        DateTime? @map("verified_at") @db.Timestamptz(6)
   active            Boolean   @default(true)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Código que el psicólogo comparte para que su paciente se vincule desde la app.
+  linkCode          String    @unique @map("link_code")
+  timezone          String    @default("America/Mexico_City")
+  defaultMeetingUrl String?   @map("default_meeting_url")
 
-  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  slots           AvailabilitySlot[]
-  appointments    Appointment[]
-  sharedSummaries SharedSummary[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots              AvailabilitySlot[]
+  appointments       Appointment[]
+  sharedSummaries    SharedSummary[]
+  careLinks          CareLink[]
+  availabilityRules  AvailabilityRule[]
+  availabilityBlocks AvailabilityBlock[]
+  routines           Routine[]
 
   @@map("psychologists")
+}
+
+// Vínculo entre una persona y su psicólogo asignado. Solo puede haber uno activo por persona.
+// Al vincularse, la persona acepta compartir el progreso de las rutinas que le asigne.
+model CareLink {
+  id                   String         @id @default(uuid()) @db.Uuid
+  patientId            String         @map("patient_id") @db.Uuid
+  psychologistId       String         @map("psychologist_id") @db.Uuid
+  status               CareLinkStatus @default(ACTIVE)
+  shareRoutineProgress Boolean        @default(true) @map("share_routine_progress")
+  // Retos automáticos del catálogo por día; lo decide el psicólogo (0 = solo sus retos).
+  autoChallengesPerDay Int            @default(3) @map("auto_challenges_per_day")
+  createdAt            DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  endedAt              DateTime?      @map("ended_at") @db.Timestamptz(6)
+
+  patient      User         @relation("PatientCareLinks", fields: [patientId], references: [id], onDelete: Cascade)
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, status])
+  @@index([psychologistId, status])
+  @@map("care_links")
+}
+
+// Horario semanal del psicólogo, en minutos desde la medianoche de su zona horaria.
+model AvailabilityRule {
+  id             String @id @default(uuid()) @db.Uuid
+  psychologistId String @map("psychologist_id") @db.Uuid
+  weekday        Int    @db.SmallInt // 0 = domingo … 6 = sábado
+  startMinute    Int    @map("start_minute")
+  endMinute      Int    @map("end_minute")
+
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+
+  @@index([psychologistId])
+  @@map("availability_rules")
+}
+
+// Días u horas en que el psicólogo no atiende (vacaciones, congresos…).
+model AvailabilityBlock {
+  id             String   @id @default(uuid()) @db.Uuid
+  psychologistId String   @map("psychologist_id") @db.Uuid
+  startsAt       DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt         DateTime @map("ends_at") @db.Timestamptz(6)
+  reason         String?
+
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+
+  @@index([psychologistId, startsAt])
+  @@map("availability_blocks")
+}
+
+// Actividad que un psicólogo asigna a su paciente para ciertos días de la semana.
+model Routine {
+  id               String       @id @default(uuid()) @db.Uuid
+  psychologistId   String       @map("psychologist_id") @db.Uuid
+  patientId        String       @map("patient_id") @db.Uuid
+  title            String
+  description      String
+  evidenceType     EvidenceType @default(TEXT) @map("evidence_type")
+  reflectionPrompt String?      @map("reflection_prompt")
+  weekdays         Int[] // 0 = domingo … 6 = sábado
+  startDate        DateTime     @map("start_date") @db.Date
+  endDate          DateTime?    @map("end_date") @db.Date
+  seedsReward      Int          @default(10) @map("seeds_reward")
+  active           Boolean      @default(true)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  psychologist Psychologist        @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+  patient      User                @relation("PatientRoutines", fields: [patientId], references: [id], onDelete: Cascade)
+  completions  RoutineCompletion[]
+
+  @@index([patientId, active])
+  @@index([psychologistId])
+  @@map("routines")
+}
+
+model RoutineCompletion {
+  id          String     @id @default(uuid()) @db.Uuid
+  routineId   String     @map("routine_id") @db.Uuid
+  date        DateTime   @db.Date
+  textContent String?    @map("text_content")
+  reflection  String?
+  riskLevel   RiskLevel? @map("risk_level")
+  completedAt DateTime   @default(now()) @map("completed_at") @db.Timestamptz(6)
+
+  routine Routine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  @@unique([routineId, date])
+  @@map("routine_completions")
 }
 
 model AvailabilitySlot {

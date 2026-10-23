@@ -22,6 +22,7 @@ Variables del servicio del backend:
 | `JWT_SECRET` | `openssl rand -base64 32` |
 | `JOURNAL_ENCRYPTION_KEY` | `openssl rand -base64 32` (si se pierde, los diarios no se pueden leer) |
 | `GROQ_API_KEY` | clave de la consola de Groq |
+| `ADMIN_EMAILS` | correos con acceso de administración, separados por comas |
 
 Al arrancar, `npm start` aplica las migraciones pendientes, carga los catálogos (retos y preguntas guiadas) y levanta la API.
 
@@ -57,6 +58,22 @@ Todas exigen `Authorization: Bearer <accessToken>`, salvo las marcadas como púb
 | GET | `/garden/shop` | Tienda: catálogo con precio, si ya lo tienes y si te alcanza |
 | POST | `/garden/shop/:itemId/buy` | Comprar un objeto con semillas |
 | PUT / DELETE | `/garden/items/:userItemId/placement` | Colocar o mover (`{x, y}`) / quitar del jardín |
+| POST | `/challenges/routines/:routineId/complete` | Completar un reto asignado por el psicólogo |
+| GET | `/care` | Psicólogo vinculado y próxima cita |
+| POST | `/care/preview` · `/care/link` | Ver de quién es un código · vincularse |
+| DELETE | `/care/link` | Desvincularse (cancela citas futuras y retos asignados) |
+| GET | `/care/slots?days=14` | Horarios libres del psicólogo |
+| GET / POST | `/care/appointments` | Mis citas · pedir una cita |
+| POST | `/care/appointments/:id/cancel` | Cancelar (mínimo 12 h antes) |
+| POST | `/auth/register-psychologist` | Registro de psicólogo (panel web) |
+| GET / PATCH | `/psy/me` | Perfil profesional · `POST /psy/me/link-code` genera un código nuevo |
+| GET | `/psy/dashboard` | Citas de hoy, solicitudes, respuestas recientes y alertas |
+| GET | `/psy/patients` · `/psy/patients/:id` | Pacientes vinculados · ficha con retos, respuestas y citas |
+| PATCH | `/psy/patients/:id/settings` | Retos automáticos por día (0 a 6) |
+| POST | `/psy/patients/:id/routines` · PATCH `/psy/routines/:id` | Crear / editar o archivar retos asignados |
+| GET / PUT / POST / DELETE | `/psy/availability…` | Horario semanal y bloqueos |
+| GET / PATCH | `/psy/appointments…` | Citas: confirmar, cancelar, completar, no asistió |
+| GET… | `/admin/…` | Estadísticas, psicólogos, catálogo de retos, líneas de ayuda y alertas (solo `ADMIN_EMAILS`) |
 | GET | `/chat/usage` | Mensajes usados hoy y límite del plan |
 | GET / POST | `/chat/conversations` | Listar / crear conversaciones |
 | GET / POST | `/chat/conversations/:id/messages` | Historial / enviar mensaje |

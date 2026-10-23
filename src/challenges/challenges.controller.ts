@@ -32,4 +32,15 @@ export class ChallengesController {
   skip(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
     return this.challenges.skip(user.id, id);
   }
+
+  // Retos asignados por el psicólogo.
+  @Post("routines/:routineId/complete")
+  @HttpCode(200)
+  completeRoutine(
+    @CurrentUser() user: AuthUser,
+    @Param("routineId", ParseUUIDPipe) routineId: string,
+    @Body() dto: CompleteChallengeDto,
+  ) {
+    return this.challenges.completeRoutine(user.id, routineId, dto);
+  }
 }

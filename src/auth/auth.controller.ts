@@ -2,7 +2,7 @@ import { Body, Controller, Get, Headers, HttpCode, Post } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { AuthUser, CurrentUser, Public } from "../common/auth.decorators";
 import { AuthService } from "./auth.service";
-import { LoginDto, RefreshDto, RegisterDto } from "./dto/auth.dto";
+import { LoginDto, RefreshDto, RegisterDto, RegisterPsychologistDto } from "./dto/auth.dto";
 
 // Límite más estricto en las rutas públicas para frenar ataques de fuerza bruta.
 const AUTH_THROTTLE = { default: { limit: 10, ttl: 60_000 } };
@@ -16,6 +16,13 @@ export class AuthController {
   @Post("register")
   register(@Body() dto: RegisterDto, @Headers("x-device-name") deviceName?: string) {
     return this.auth.register(dto, deviceName);
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @Post("register-psychologist")
+  registerPsychologist(@Body() dto: RegisterPsychologistDto, @Headers("x-device-name") deviceName?: string) {
+    return this.auth.registerPsychologist(dto, deviceName);
   }
 
   @Public()

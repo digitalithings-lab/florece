@@ -34,6 +34,15 @@ export const config = {
   refreshTokenTtlDays: int("REFRESH_TOKEN_TTL_DAYS", 30),
   journalKey: journalKey(),
   consentVersion: process.env.CONSENT_VERSION ?? "2026-10",
+  // Correos con acceso de administración, separados por comas.
+  adminEmails: (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
+  // Horas mínimas de anticipación para que la persona cancele una cita.
+  cancelMinHours: int("APPOINTMENT_CANCEL_MIN_HOURS", 12),
+  // Horas mínimas de anticipación para reservar.
+  bookingMinHours: int("APPOINTMENT_BOOKING_MIN_HOURS", 2),
   groq: {
     apiKey: process.env.GROQ_API_KEY ?? "",
     baseUrl: process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
