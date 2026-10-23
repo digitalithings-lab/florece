@@ -126,6 +126,7 @@ enum RiskSource {
   JOURNAL
   COMMUNITY
   CALM_BUTTON
+  CHALLENGE
 }
 
 enum PostStatus {
