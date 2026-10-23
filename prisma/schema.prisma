@@ -69,6 +69,22 @@ enum SeedReason {
   PURCHASE
   BONUS
   ADJUSTMENT
+  ACTIVITY
+}
+
+enum ActivityType {
+  BREATHING
+  MEDITATION
+  BODY_SCAN
+  GRATITUDE
+  BUBBLES
+  ZEN_GARDEN
+  CONTENT
+}
+
+enum ContentKind {
+  READING
+  LINK
 }
 
 enum ChallengeCategory {
@@ -233,6 +249,8 @@ model User {
   appointments     Appointment[]
   careLinks        CareLink[]         @relation("PatientCareLinks")
   routines         Routine[]          @relation("PatientRoutines")
+  activityLogs     ActivityLog[]
+  assignedContent  AssignedContent[]  @relation("PatientContent")
   sharedSummaries  SharedSummary[]
   subscriptions    Subscription[]
 
@@ -275,6 +293,7 @@ model Profile {
   plan                  Plan        @default(FREE)
   premiumUntil          DateTime?   @map("premium_until") @db.Timestamptz(6)
   seedsBalance          Int         @default(0) @map("seeds_balance")
+  waterBalance          Int         @default(0) @map("water_balance") // gotas para regar las plantas
   timezone              String      @default("America/Mexico_City")
   countryCode           String?     @map("country_code") @db.Char(2) // para mostrar recursos de crisis locales
   onboardingCompletedAt DateTime?   @map("onboarding_completed_at") @db.Timestamptz(6)
@@ -345,6 +364,9 @@ model Item {
   emoji       String? // representación visual mientras no haya ilustraciones
   sortOrder   Int          @default(0) @map("sort_order")
   active      Boolean      @default(true)
+  // Objetos exclusivos: no se compran, se ganan con rachas de actividades.
+  purchasable Boolean      @default(true)
+  unlockKey   String?      @map("unlock_key")
   createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
 
   owners UserItem[]
@@ -357,6 +379,7 @@ model UserItem {
   userId     String   @map("user_id") @db.Uuid
   itemId     String   @map("item_id") @db.Uuid
   equipped   Boolean  @default(false) // ropa/accesorio puesto en el avatar
+  growth     Int      @default(0) // riegos recibidos; las plantas crecen por etapas
   acquiredAt DateTime @default(now()) @map("acquired_at") @db.Timestamptz(6)
 
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -727,6 +750,7 @@ model Psychologist {
   availabilityRules  AvailabilityRule[]
   availabilityBlocks AvailabilityBlock[]
   routines           Routine[]
+  contents           AssignedContent[]
 
   @@map("psychologists")
 }
@@ -880,4 +904,46 @@ model SharedSummary {
 
   @@index([userId])
   @@map("shared_summaries")
+}
+
+// ─────────────────────────────────────────────
+// Actividades (además de los retos)
+// ─────────────────────────────────────────────
+
+// Cada vez que la persona hace una actividad. La gratitud se guarda cifrada.
+model ActivityLog {
+  id            String       @id @default(uuid()) @db.Uuid
+  userId        String       @map("user_id") @db.Uuid
+  type          ActivityType
+  date          DateTime     @db.Date // día local de la persona
+  durationSec   Int?         @map("duration_sec")
+  dataEncrypted String?      @map("data_encrypted")
+  contentId     String?      @map("content_id") @db.Uuid
+  waterEarned   Int          @default(0) @map("water_earned")
+  seedsEarned   Int          @default(0) @map("seeds_earned")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type, date])
+  @@map("activity_logs")
+}
+
+// Lecturas o enlaces que el psicólogo asigna a su paciente.
+model AssignedContent {
+  id             String      @id @default(uuid()) @db.Uuid
+  psychologistId String      @map("psychologist_id") @db.Uuid
+  patientId      String      @map("patient_id") @db.Uuid
+  title          String
+  kind           ContentKind
+  body           String?
+  url            String?
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt    DateTime?   @map("completed_at") @db.Timestamptz(6)
+
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+  patient      User         @relation("PatientContent", fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId, completedAt])
+  @@map("assigned_content")
 }

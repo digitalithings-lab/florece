@@ -149,7 +149,16 @@ const journalPrompts: { text: string; focusArea: FocusArea | null }[] = [
 ];
 
 // Catálogo de la tienda del jardín. Los emojis son provisionales hasta tener ilustraciones.
-const items: { slug: string; name: string; category: ItemCategory; emoji: string; priceSeeds: number; premiumOnly?: boolean }[] = [
+const items: {
+  slug: string;
+  name: string;
+  category: ItemCategory;
+  emoji: string;
+  priceSeeds: number;
+  premiumOnly?: boolean;
+  purchasable?: boolean;
+  unlockKey?: string;
+}[] = [
   { slug: "tulipan", name: "Tulipán", category: ItemCategory.PLANT, emoji: "🌷", priceSeeds: 15 },
   { slug: "margarita", name: "Margarita", category: ItemCategory.PLANT, emoji: "🌼", priceSeeds: 15 },
   { slug: "girasol", name: "Girasol", category: ItemCategory.PLANT, emoji: "🌻", priceSeeds: 20 },
@@ -168,11 +177,28 @@ const items: { slug: string; name: string; category: ItemCategory; emoji: string
   { slug: "fuente", name: "Fuente", category: ItemCategory.FURNITURE, emoji: "⛲", priceSeeds: 100 },
   { slug: "casita", name: "Casita", category: ItemCategory.FURNITURE, emoji: "🏡", priceSeeds: 150 },
   { slug: "arcoiris", name: "Arcoíris", category: ItemCategory.DECORATION, emoji: "🌈", priceSeeds: 200, premiumOnly: true },
+  // Accesorios para el compañero.
+  { slug: "sombrero", name: "Sombrero de paja", category: ItemCategory.ACCESSORY, emoji: "👒", priceSeeds: 40 },
+  { slug: "mono", name: "Moño", category: ItemCategory.ACCESSORY, emoji: "🎀", priceSeeds: 30 },
+  { slug: "gorra", name: "Gorra", category: ItemCategory.ACCESSORY, emoji: "🧢", priceSeeds: 35 },
+  { slug: "lentes", name: "Lentes de sol", category: ItemCategory.ACCESSORY, emoji: "🕶️", priceSeeds: 50 },
+  // Exclusivos: se ganan con rachas (ver activities.constants.ts).
+  { slug: "bufanda", name: "Bufanda de calma", category: ItemCategory.ACCESSORY, emoji: "🧣", priceSeeds: 0, purchasable: false, unlockKey: "streak:BREATHING:3" },
+  { slug: "corona-de-flores", name: "Corona de calma", category: ItemCategory.ACCESSORY, emoji: "👑", priceSeeds: 0, purchasable: false, unlockKey: "streak:MEDITATION:5" },
+  { slug: "loto-de-calma", name: "Loto de calma", category: ItemCategory.DECORATION, emoji: "🪷", priceSeeds: 0, purchasable: false, unlockKey: "streak:BREATHING:7" },
+  { slug: "trebol-de-gratitud", name: "Trébol de gratitud", category: ItemCategory.DECORATION, emoji: "🍀", priceSeeds: 0, purchasable: false, unlockKey: "streak:GRATITUDE:7" },
+  { slug: "mariquita", name: "Mariquita de la suerte", category: ItemCategory.DECORATION, emoji: "🐞", priceSeeds: 0, purchasable: false, unlockKey: "total:ANY:30" },
 ];
 
 async function main() {
   for (const [index, item] of items.entries()) {
-    const data = { ...item, premiumOnly: item.premiumOnly ?? false, sortOrder: index };
+    const data = {
+      ...item,
+      premiumOnly: item.premiumOnly ?? false,
+      purchasable: item.purchasable ?? true,
+      unlockKey: item.unlockKey ?? null,
+      sortOrder: index,
+    };
     await prisma.item.upsert({ where: { slug: item.slug }, create: data, update: data });
   }
 

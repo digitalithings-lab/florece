@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { APP_GUARD } from "@nestjs/core";
 import { JwtModule } from "@nestjs/jwt";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { ActivitiesModule } from "./activities/activities.module";
 import { AdminModule } from "./admin/admin.module";
 import { AuthModule } from "./auth/auth.module";
 import { CareModule } from "./care/care.module";
@@ -39,6 +40,7 @@ import { SafetyModule } from "./safety/safety.module";
     CareModule,
     PsyModule,
     AdminModule,
+    ActivitiesModule,
   ],
   controllers: [HealthController],
   providers: [

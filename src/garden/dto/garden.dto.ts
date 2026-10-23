@@ -1,4 +1,12 @@
-import { IsInt, Max, Min } from "class-validator";
+import { IsInt, IsOptional, IsUUID, Max, Min, ValidateIf } from "class-validator";
+
+export class EquipDto {
+  // null para quitar el accesorio.
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsUUID()
+  userItemId?: string | null;
+}
 import { GARDEN_COLS, GARDEN_ROWS } from "../garden.constants";
 
 export class PlaceItemDto {

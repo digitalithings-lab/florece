@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from "@nestjs/common";
 import { UserRole } from "@prisma/client";
 import { AuthUser, CurrentUser } from "../common/auth.decorators";
 import { Roles } from "../common/roles";
@@ -7,6 +7,7 @@ import {
   AppointmentsQueryDto,
   AvailabilityRulesDto,
   BlockDto,
+  CreateContentDto,
   CreateRoutineDto,
   PatientSettingsDto,
   UpdatePsyProfileDto,
@@ -75,6 +76,21 @@ export class PsyController {
     @Body() dto: UpdateRoutineDto,
   ) {
     return this.psy.updateRoutine(user.id, routineId, dto);
+  }
+
+  @Post("patients/:patientId/content")
+  createContent(
+    @CurrentUser() user: AuthUser,
+    @Param("patientId", ParseUUIDPipe) patientId: string,
+    @Body() dto: CreateContentDto,
+  ) {
+    return this.psy.createContent(user.id, patientId, dto);
+  }
+
+  @Delete("content/:contentId")
+  @HttpCode(204)
+  async deleteContent(@CurrentUser() user: AuthUser, @Param("contentId", ParseUUIDPipe) contentId: string) {
+    await this.psy.deleteContent(user.id, contentId);
   }
 
   @Get("catalog")

@@ -2,7 +2,9 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import {
   Appointment,
   AppointmentStatus,
+  AssignedContent,
   CareLinkStatus,
+  ContentKind,
   DailyChallengeStatus,
   Prisma,
   Psychologist,
@@ -20,6 +22,7 @@ import {
   AppointmentActionDto,
   AppointmentsQueryDto,
   BlockDto,
+  CreateContentDto,
   CreateRoutineDto,
   RuleDto,
   UpdatePsyProfileDto,
@@ -191,7 +194,7 @@ export class PsyService {
     const timezone = link.patient.profile?.timezone ?? psychologist.timezone;
     const since = DateTime.now().minus({ days: 30 }).toJSDate();
 
-    const [routines, completions, dailyChallenges, appointments] = await Promise.all([
+    const [routines, completions, dailyChallenges, appointments, contents] = await Promise.all([
       this.prisma.routine.findMany({
         where: { patientId, psychologistId: psychologist.id },
         orderBy: [{ active: "desc" }, { createdAt: "desc" }],
@@ -212,6 +215,10 @@ export class PsyService {
         where: { patientId, psychologistId: psychologist.id },
         orderBy: { startsAt: "desc" },
         take: 20,
+      }),
+      this.prisma.assignedContent.findMany({
+        where: { patientId, psychologistId: psychologist.id },
+        orderBy: { createdAt: "desc" },
       }),
     ]);
 
@@ -265,6 +272,7 @@ export class PsyService {
       })),
       responses,
       appointments: appointments.map((a) => this.formatAppointment(a)),
+      contents: contents.map((c) => this.formatContent(c)),
     };
   }
 
@@ -320,6 +328,32 @@ export class PsyService {
       },
     });
     return this.formatRoutine(updated);
+  }
+
+  // ─── Contenido asignado ──────────────────────────────
+
+  async createContent(userId: string, patientId: string, dto: CreateContentDto) {
+    const psychologist = await this.require(userId);
+    await this.requireLink(psychologist.id, patientId);
+    if (dto.kind === ContentKind.READING && !dto.body?.trim()) throw new BadRequestException("Escribe el texto de la lectura");
+    if (dto.kind === ContentKind.LINK && !dto.url) throw new BadRequestException("Pega el enlace");
+
+    const content = await this.prisma.assignedContent.create({
+      data: {
+        psychologistId: psychologist.id,
+        patientId,
+        title: dto.title.trim(),
+        kind: dto.kind,
+        body: dto.body?.trim() || null,
+        url: dto.url ?? null,
+      },
+    });
+    return this.formatContent(content);
+  }
+
+  async deleteContent(userId: string, contentId: string) {
+    const psychologist = await this.require(userId);
+    await this.prisma.assignedContent.deleteMany({ where: { id: contentId, psychologistId: psychologist.id } });
   }
 
   async catalog(userId: string) {
@@ -490,6 +524,10 @@ export class PsyService {
       verified: p.verifiedAt !== null,
       active: p.active,
     };
+  }
+
+  private formatContent(c: AssignedContent) {
+    return { id: c.id, title: c.title, kind: c.kind, body: c.body, url: c.url, createdAt: c.createdAt, completedAt: c.completedAt };
   }
 
   private formatRoutine(r: Routine) {

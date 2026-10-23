@@ -1,4 +1,4 @@
-import { AppointmentStatus, EvidenceType } from "@prisma/client";
+import { AppointmentStatus, ContentKind, EvidenceType } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -91,6 +91,14 @@ export class UpdateRoutineDto {
   @IsOptional() @ValidateIf((_o, v) => v !== null) @Matches(DATE) endDate?: string | null;
   @IsOptional() @IsInt() @Min(0) @Max(50) seedsReward?: number;
   @IsOptional() @IsBoolean() active?: boolean;
+}
+
+export class CreateContentDto {
+  @IsString() @Length(3, 120) title: string;
+  @IsIn([ContentKind.READING, ContentKind.LINK]) kind: ContentKind;
+  // READING: texto para leer en la app. LINK: enlace a un video o artículo.
+  @IsOptional() @IsString() @MaxLength(5000) body?: string;
+  @IsOptional() @IsUrl({}, { message: "El enlace no es válido" }) url?: string;
 }
 
 export class RuleDto {

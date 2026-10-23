@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { Item, Plan, Prisma, SeedReason } from "@prisma/client";
+import { Item, ItemCategory, Plan, Prisma, SeedReason } from "@prisma/client";
+import { growthStage, MAX_GROWTH, UNLOCKS } from "../activities/activities.constants";
 import { effectivePlan } from "../common/access";
 import { PrismaService } from "../prisma/prisma.service";
 import { GARDEN_COLS, GARDEN_ROWS } from "./garden.constants";
@@ -18,16 +19,59 @@ export class GardenService {
       }),
     ]);
 
+    const accessory = owned.find((o) => o.equipped && o.item.category === ItemCategory.ACCESSORY);
+
     return {
       seedsBalance: profile.seedsBalance,
+      waterBalance: profile.waterBalance,
       grid: { cols: GARDEN_COLS, rows: GARDEN_ROWS },
-      avatar: profile.user.avatar && { species: profile.user.avatar.species, name: profile.user.avatar.name },
+      avatar: profile.user.avatar && {
+        species: profile.user.avatar.species,
+        name: profile.user.avatar.name,
+        accessory: accessory ? { userItemId: accessory.id, emoji: accessory.item.emoji, name: accessory.item.name } : null,
+      },
       items: owned.map((owner) => ({
         userItemId: owner.id,
         item: this.formatItem(owner.item),
         placement: owner.placement && { x: owner.placement.x, y: owner.placement.y },
+        // Solo las plantas crecen; lo demás llega completo.
+        growth: owner.growth,
+        stage: owner.item.category === ItemCategory.PLANT ? growthStage(owner.growth) : "grown",
+        equipped: owner.equipped,
       })),
     };
+  }
+
+  // Regar una planta: gasta una gota y la hace crecer un poco.
+  async water(userId: string, userItemId: string) {
+    const owned = await this.prisma.userItem.findFirst({ where: { id: userItemId, userId }, include: { item: true } });
+    if (!owned) throw new NotFoundException("Ese objeto no está en tu inventario");
+    if (owned.item.category !== ItemCategory.PLANT) throw new BadRequestException("Solo las plantas se riegan");
+    if (owned.growth >= MAX_GROWTH) throw new ConflictException("Esta planta ya creció por completo");
+
+    await this.prisma.$transaction(async (tx) => {
+      const spent = await tx.profile.updateMany({
+        where: { userId, waterBalance: { gte: 1 } },
+        data: { waterBalance: { decrement: 1 } },
+      });
+      if (spent.count === 0) throw new BadRequestException("No tienes agua. Haz una actividad para conseguir gotas 💧");
+      await tx.userItem.update({ where: { id: owned.id }, data: { growth: { increment: 1 } } });
+    });
+    return this.garden(userId);
+  }
+
+  // Ponerle (o quitarle, con null) un accesorio al compañero. Solo uno a la vez.
+  async equip(userId: string, userItemId: string | null) {
+    if (userItemId) {
+      const owned = await this.prisma.userItem.findFirst({ where: { id: userItemId, userId }, include: { item: true } });
+      if (!owned) throw new NotFoundException("Ese objeto no está en tu inventario");
+      if (owned.item.category !== ItemCategory.ACCESSORY) throw new BadRequestException("Eso no es un accesorio");
+    }
+    await this.prisma.$transaction([
+      this.prisma.userItem.updateMany({ where: { userId, equipped: true }, data: { equipped: false } }),
+      ...(userItemId ? [this.prisma.userItem.update({ where: { id: userItemId }, data: { equipped: true } })] : []),
+    ]);
+    return this.garden(userId);
   }
 
   async shop(userId: string) {
@@ -46,6 +90,9 @@ export class GardenService {
         owned: ownedIds.has(item.id),
         locked: item.premiumOnly && !isPremium,
         affordable: profile.seedsBalance >= item.priceSeeds,
+        // Los exclusivos se muestran para motivar, pero no se compran.
+        exclusive: !item.purchasable,
+        unlockHint: item.unlockKey ? (UNLOCKS.find((u) => u.key === item.unlockKey)?.description ?? null) : null,
       })),
     };
   }
@@ -53,6 +100,7 @@ export class GardenService {
   async buy(userId: string, itemId: string) {
     const item = await this.prisma.item.findFirst({ where: { id: itemId, active: true } });
     if (!item) throw new NotFoundException("Ese objeto no existe");
+    if (!item.purchasable) throw new ForbiddenException("Este objeto no se compra: se gana con constancia");
 
     const profile = await this.prisma.profile.findUniqueOrThrow({ where: { userId } });
     if (item.premiumOnly && effectivePlan(profile) !== Plan.PREMIUM) {
@@ -85,7 +133,11 @@ export class GardenService {
   }
 
   async place(userId: string, userItemId: string, x: number, y: number) {
-    await this.findOwned(userId, userItemId);
+    const owned = await this.findOwned(userId, userItemId);
+    const item = await this.prisma.item.findUniqueOrThrow({ where: { id: owned.itemId } });
+    if (item.category === ItemCategory.ACCESSORY) {
+      throw new BadRequestException("Los accesorios se le ponen a tu compañero, no se plantan");
+    }
 
     const occupied = await this.prisma.gardenPlacement.findFirst({
       where: { x, y, userItem: { userId }, NOT: { userItemId } },
