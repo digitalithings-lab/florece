@@ -9,6 +9,7 @@ import { CareModule } from "./care/care.module";
 import { PsyModule } from "./psy/psy.module";
 import { ChallengesModule } from "./challenges/challenges.module";
 import { ChatModule } from "./chat/chat.module";
+import { EmotionsModule } from "./emotions/emotions.module";
 import { JwtAuthGuard } from "./common/jwt-auth.guard";
 import { RolesGuard } from "./common/roles";
 import { config } from "./config";
@@ -41,6 +42,7 @@ import { SafetyModule } from "./safety/safety.module";
     PsyModule,
     AdminModule,
     ActivitiesModule,
+    EmotionsModule,
   ],
   controllers: [HealthController],
   providers: [

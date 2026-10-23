@@ -47,7 +47,7 @@ export class GardenService {
     const owned = await this.prisma.userItem.findFirst({ where: { id: userItemId, userId }, include: { item: true } });
     if (!owned) throw new NotFoundException("Ese objeto no está en tu inventario");
     if (owned.item.category !== ItemCategory.PLANT) throw new BadRequestException("Solo las plantas se riegan");
-    if (owned.growth >= MAX_GROWTH) throw new ConflictException("Esta planta ya creció por completo");
+    if (owned.growth >= MAX_GROWTH) throw new ConflictException("Esta planta ya floreció por completo");
 
     await this.prisma.$transaction(async (tx) => {
       const spent = await tx.profile.updateMany({
@@ -56,6 +56,27 @@ export class GardenService {
       });
       if (spent.count === 0) throw new BadRequestException("No tienes agua. Haz una actividad para conseguir gotas 💧");
       await tx.userItem.update({ where: { id: owned.id }, data: { growth: { increment: 1 } } });
+    });
+    return this.garden(userId);
+  }
+
+  // Reparte el agua disponible: una gota por planta que aún pueda crecer, empezando por las más pequeñas.
+  async waterAll(userId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`water:${userId}`}))`;
+      const profile = await tx.profile.findUniqueOrThrow({ where: { userId } });
+      if (profile.waterBalance < 1) throw new BadRequestException("No tienes agua. Haz una actividad para conseguir gotas 💧");
+
+      const plants = await tx.userItem.findMany({
+        where: { userId, growth: { lt: MAX_GROWTH }, item: { category: ItemCategory.PLANT } },
+        orderBy: { growth: "asc" },
+        take: profile.waterBalance,
+        select: { id: true },
+      });
+      if (plants.length === 0) throw new ConflictException("Todas tus plantas ya florecieron 🌸");
+
+      await tx.userItem.updateMany({ where: { id: { in: plants.map((p) => p.id) } }, data: { growth: { increment: 1 } } });
+      await tx.profile.update({ where: { userId }, data: { waterBalance: { decrement: plants.length } } });
     });
     return this.garden(userId);
   }

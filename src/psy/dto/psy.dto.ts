@@ -101,6 +101,23 @@ export class CreateContentDto {
   @IsOptional() @IsUrl({}, { message: "El enlace no es válido" }) url?: string;
 }
 
+export class EmotionDto {
+  @IsString() @Length(1, 30) label: string;
+  @IsString() @Length(1, 16) emoji: string;
+  @Matches(/^#[0-9a-fA-F]{6}$/, { message: "El color debe ser hexadecimal, p. ej. #F6C453" }) color: string;
+}
+
+export class UpdateEmotionDto {
+  @IsOptional() @IsString() @Length(1, 30) label?: string;
+  @IsOptional() @IsString() @Length(1, 16) emoji?: string;
+  @IsOptional() @Matches(/^#[0-9a-fA-F]{6}$/, { message: "El color debe ser hexadecimal, p. ej. #F6C453" }) color?: string;
+  @IsOptional() @IsBoolean() active?: boolean;
+}
+
+export class ReorderDto {
+  @IsArray() @ArrayMaxSize(40) @IsString({ each: true }) ids: string[];
+}
+
 export class RuleDto {
   @IsInt() @Min(0) @Max(6) weekday: number;
   @IsInt() @Min(0) @Max(1439) startMinute: number;

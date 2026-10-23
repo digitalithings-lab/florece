@@ -38,6 +38,12 @@ export class GardenController {
     return this.garden.water(user.id, userItemId);
   }
 
+  @Post("water-all")
+  @HttpCode(200)
+  waterAll(@CurrentUser() user: AuthUser) {
+    return this.garden.waterAll(user.id);
+  }
+
   @Put("accessory")
   equip(@CurrentUser() user: AuthUser, @Body() dto: EquipDto) {
     return this.garden.equip(user.id, dto.userItemId ?? null);

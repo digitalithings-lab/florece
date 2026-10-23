@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, P
 import { UserRole } from "@prisma/client";
 import { AuthUser, CurrentUser } from "../common/auth.decorators";
 import { Roles } from "../common/roles";
+import { EmotionsService } from "../emotions/emotions.service";
 import {
   AppointmentActionDto,
   AppointmentsQueryDto,
@@ -9,6 +10,9 @@ import {
   BlockDto,
   CreateContentDto,
   CreateRoutineDto,
+  EmotionDto,
+  ReorderDto,
+  UpdateEmotionDto,
   PatientSettingsDto,
   UpdatePsyProfileDto,
   UpdateRoutineDto,
@@ -19,7 +23,10 @@ import { PsyService } from "./psy.service";
 @Controller("psy")
 @Roles(UserRole.PSYCHOLOGIST)
 export class PsyController {
-  constructor(private readonly psy: PsyService) {}
+  constructor(
+    private readonly psy: PsyService,
+    private readonly emotionsService: EmotionsService,
+  ) {}
 
   @Get("me")
   me(@CurrentUser() user: AuthUser) {
@@ -91,6 +98,38 @@ export class PsyController {
   @HttpCode(204)
   async deleteContent(@CurrentUser() user: AuthUser, @Param("contentId", ParseUUIDPipe) contentId: string) {
     await this.psy.deleteContent(user.id, contentId);
+  }
+
+  // ─── Emociones para sus pacientes ────────────────────
+
+  @Get("emotions")
+  async emotions(@CurrentUser() user: AuthUser) {
+    return this.emotionsService.forPsychologist((await this.psy.me(user.id)).id);
+  }
+
+  @Post("emotions")
+  async createEmotion(@CurrentUser() user: AuthUser, @Body() dto: EmotionDto) {
+    return this.emotionsService.create((await this.psy.me(user.id)).id, dto);
+  }
+
+  @Post("emotions/copy-defaults")
+  async copyDefaultEmotions(@CurrentUser() user: AuthUser) {
+    return this.emotionsService.copyDefaults((await this.psy.me(user.id)).id);
+  }
+
+  @Put("emotions/order")
+  async reorderEmotions(@CurrentUser() user: AuthUser, @Body() dto: ReorderDto) {
+    return this.emotionsService.reorder((await this.psy.me(user.id)).id, dto.ids);
+  }
+
+  @Patch("emotions/:id")
+  async updateEmotion(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string, @Body() dto: UpdateEmotionDto) {
+    return this.emotionsService.update((await this.psy.me(user.id)).id, id, dto);
+  }
+
+  @Delete("emotions/:id")
+  async deleteEmotion(@CurrentUser() user: AuthUser, @Param("id", ParseUUIDPipe) id: string) {
+    return this.emotionsService.remove((await this.psy.me(user.id)).id, id);
   }
 
   @Get("catalog")

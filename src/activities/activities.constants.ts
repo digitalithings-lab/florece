@@ -30,10 +30,13 @@ export const UNLOCKS: UnlockRule[] = [
   { key: "total:ANY:30", itemSlug: "mariquita", type: "ANY", mode: "total", target: 30, description: "Completa 30 actividades" },
 ];
 
-// Etapas de crecimiento de una planta según los riegos recibidos.
-export const MAX_GROWTH = 5;
-export function growthStage(growth: number): "sprout" | "bush" | "grown" {
-  if (growth >= MAX_GROWTH) return "grown";
+// Etapas de crecimiento de una planta según los riegos recibidos:
+// brote (0-1) → arbusto (2-4) → crecida (5-9) → florecida (10).
+// Las plantas compradas antes de esta versión empiezan crecidas y aún pueden florecer.
+export const MAX_GROWTH = 10;
+export function growthStage(growth: number): "sprout" | "bush" | "grown" | "bloom" {
+  if (growth >= MAX_GROWTH) return "bloom";
+  if (growth >= 5) return "grown";
   if (growth >= 2) return "bush";
   return "sprout";
 }

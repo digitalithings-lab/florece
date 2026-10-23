@@ -60,6 +60,12 @@ export class MoodsController {
     return this.journal.createMood(user.id, dto);
   }
 
+  // Emociones que esta persona puede registrar (las de su psicólogo o las de por defecto).
+  @Get("options")
+  options(@CurrentUser() user: AuthUser) {
+    return this.journal.moodOptions(user.id);
+  }
+
   @Get()
   month(@CurrentUser() user: AuthUser, @Query() query: MoodMonthQueryDto) {
     return this.journal.moodsForMonth(user.id, query.month);

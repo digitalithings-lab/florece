@@ -512,18 +512,44 @@ model JournalEntry {
 }
 
 model MoodLog {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  date      DateTime @db.Date
-  emotion   Emotion
-  intensity Int      @db.SmallInt // 1 a 5
-  note      String?
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  date            DateTime @db.Date
+  emotion         Emotion? // registros anteriores a las emociones configurables
+  emotionOptionId String?  @map("emotion_option_id") @db.Uuid
+  // Copia de la emoción al registrarla: el calendario se ve igual aunque luego cambie o se borre.
+  emotionLabel    String   @map("emotion_label")
+  emotionEmoji    String   @map("emotion_emoji")
+  emotionColor    String   @map("emotion_color")
+  intensity       Int      @db.SmallInt // 1 a 5
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emotionOption EmotionOption? @relation(fields: [emotionOptionId], references: [id], onDelete: SetNull)
 
   @@index([userId, date])
   @@map("mood_logs")
+}
+
+// Emociones que la persona puede registrar. Sin psicólogo (psychologistId nulo) son la lista por defecto;
+// cada psicólogo puede armar la suya para sus pacientes.
+model EmotionOption {
+  id             String   @id @default(uuid()) @db.Uuid
+  psychologistId String?  @map("psychologist_id") @db.Uuid
+  slug           String?  @unique // solo las de la lista por defecto
+  label          String
+  emoji          String
+  color          String   @db.Char(7)
+  sortOrder      Int      @default(0) @map("sort_order")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  psychologist Psychologist? @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+  moodLogs     MoodLog[]
+
+  @@index([psychologistId, active])
+  @@map("emotion_options")
 }
 
 // ─────────────────────────────────────────────
@@ -751,6 +777,7 @@ model Psychologist {
   availabilityBlocks AvailabilityBlock[]
   routines           Routine[]
   contents           AssignedContent[]
+  emotionOptions     EmotionOption[]
 
   @@map("psychologists")
 }

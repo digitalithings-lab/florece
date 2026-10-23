@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { JournalEntry, RiskSource } from "@prisma/client";
+import { JournalEntry, MoodLog, RiskSource } from "@prisma/client";
+import { EmotionsService } from "../emotions/emotions.service";
 import { decrypt, encrypt } from "../common/crypto";
 import { addDays, dateFromString, localDate, toDateString } from "../common/dates";
 import { config } from "../config";
@@ -39,6 +40,7 @@ export class JournalService {
     private readonly groq: GroqService,
     private readonly usage: AiUsageService,
     private readonly safety: SafetyService,
+    private readonly emotions: EmotionsService,
   ) {}
 
   async prompts(userId: string) {
@@ -182,10 +184,32 @@ export class JournalService {
       throw new BadRequestException("No puedes registrar emociones de días futuros");
     }
 
+    // Solo se aceptan emociones de la lista que esta persona tiene disponible.
+    const options = await this.emotions.optionsForUser(userId);
+    const option = dto.emotionOptionId
+      ? options.find((o) => o.id === dto.emotionOptionId)
+      : dto.emotion // apps anteriores enviaban el nombre fijo de la emoción
+        ? options.find((o) => o.slug === dto.emotion!.toLowerCase())
+        : undefined;
+    if (!option) throw new BadRequestException("Elige una de las emociones de la lista");
+
     const log = await this.prisma.moodLog.create({
-      data: { userId, date, emotion: dto.emotion, intensity: dto.intensity, note: dto.note?.trim() || null },
+      data: {
+        userId,
+        date,
+        emotionOptionId: option.id,
+        emotionLabel: option.label,
+        emotionEmoji: option.emoji,
+        emotionColor: option.color,
+        intensity: dto.intensity,
+        note: dto.note?.trim() || null,
+      },
     });
     return this.formatMood(log);
+  }
+
+  async moodOptions(userId: string) {
+    return (await this.emotions.optionsForUser(userId)).map((o) => ({ id: o.id, label: o.label, emoji: o.emoji, color: o.color }));
   }
 
   async moodsForMonth(userId: string, month: string) {
@@ -197,9 +221,13 @@ export class JournalService {
       orderBy: [{ date: "asc" }, { createdAt: "asc" }],
     });
 
-    const counts: Record<string, number> = {};
+    // Resumen por emoción (agrupado por nombre, emoji y color tal como se registraron).
+    const byEmotion = new Map<string, { label: string; emoji: string; color: string; count: number }>();
     for (const log of logs) {
-      counts[log.emotion] = (counts[log.emotion] ?? 0) + 1;
+      const key = `${log.emotionLabel}|${log.emotionEmoji}|${log.emotionColor}`;
+      const entry = byEmotion.get(key) ?? { label: log.emotionLabel, emoji: log.emotionEmoji, color: log.emotionColor, count: 0 };
+      entry.count++;
+      byEmotion.set(key, entry);
     }
 
     return {
@@ -208,7 +236,7 @@ export class JournalService {
       summary: {
         total: logs.length,
         daysLogged: new Set(logs.map((log) => toDateString(log.date))).size,
-        byEmotion: counts,
+        byEmotion: [...byEmotion.values()].sort((a, b) => b.count - a.count),
       },
     };
   }
@@ -235,11 +263,11 @@ export class JournalService {
     };
   }
 
-  private formatMood(log: { id: string; date: Date; emotion: string; intensity: number; note: string | null; createdAt: Date }) {
+  private formatMood(log: MoodLog) {
     return {
       id: log.id,
       date: toDateString(log.date),
-      emotion: log.emotion,
+      emotion: { id: log.emotionOptionId, label: log.emotionLabel, emoji: log.emotionEmoji, color: log.emotionColor },
       intensity: log.intensity,
       note: log.note,
       createdAt: log.createdAt,

@@ -12,6 +12,7 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from "class-validator";
 
 export class CreateJournalEntryDto {
@@ -73,8 +74,15 @@ export class ListJournalQueryDto {
 }
 
 export class CreateMoodDto {
+  // Emoción de la lista disponible para la persona (GET /moods/options).
+  @ValidateIf((o: CreateMoodDto) => !o.emotion)
+  @IsUUID()
+  emotionOptionId?: string;
+
+  // Compatibilidad con apps anteriores, que enviaban el nombre fijo de la emoción.
+  @IsOptional()
   @IsEnum(Emotion)
-  emotion: Emotion;
+  emotion?: Emotion;
 
   @IsInt()
   @Min(1)
