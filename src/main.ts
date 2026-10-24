@@ -8,7 +8,7 @@ import { config } from "./config";
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
-  // Railway pone un proxy delante; sin esto el límite de peticiones vería a todos con la misma IP.
+  // Vercel pone un proxy delante; sin esto el límite de peticiones vería a todos con la misma IP.
   app.set("trust proxy", 1);
   app.enableCors();
   app.enableShutdownHooks();

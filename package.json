@@ -8,7 +8,9 @@
     "node": "22.x"
   },
   "scripts": {
+    "postinstall": "prisma generate",
     "build": "prisma generate && tsc -p tsconfig.json",
+    "vercel-build": "prisma generate && tsc -p tsconfig.json && prisma migrate deploy && node dist/seed.js",
     "start": "prisma migrate deploy && node dist/seed.js && node dist/main.js",
     "dev": "npm run build && node --env-file=.env dist/main.js",
     "db:validate": "prisma validate"
