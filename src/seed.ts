@@ -182,6 +182,11 @@ const items: {
   { slug: "mono", name: "Moño", category: ItemCategory.ACCESSORY, emoji: "🎀", priceSeeds: 30 },
   { slug: "gorra", name: "Gorra", category: ItemCategory.ACCESSORY, emoji: "🧢", priceSeeds: 35 },
   { slug: "lentes", name: "Lentes de sol", category: ItemCategory.ACCESSORY, emoji: "🕶️", priceSeeds: 50 },
+  // Ropa de pago para el avatar (ver character.constants.ts). La ropa básica es gratis.
+  { slug: "ropa-sudadera", name: "Sudadera", category: ItemCategory.CLOTHING, emoji: "🧥", priceSeeds: 40 },
+  { slug: "ropa-vestido", name: "Vestido", category: ItemCategory.CLOTHING, emoji: "👗", priceSeeds: 50 },
+  { slug: "ropa-chaqueta", name: "Chaqueta", category: ItemCategory.CLOTHING, emoji: "🧥", priceSeeds: 60 },
+  { slug: "ropa-botas", name: "Botas", category: ItemCategory.CLOTHING, emoji: "🥾", priceSeeds: 30 },
   // Exclusivos: se ganan con rachas (ver activities.constants.ts).
   { slug: "bufanda", name: "Bufanda de calma", category: ItemCategory.ACCESSORY, emoji: "🧣", priceSeeds: 0, purchasable: false, unlockKey: "streak:BREATHING:3" },
   { slug: "corona-de-flores", name: "Corona de calma", category: ItemCategory.ACCESSORY, emoji: "👑", priceSeeds: 0, purchasable: false, unlockKey: "streak:MEDITATION:5" },

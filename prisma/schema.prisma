@@ -230,7 +230,8 @@ model User {
   sessions         Session[]
   profile          Profile?
   consents         Consent[]
-  avatar           Avatar?
+  avatar           Avatar? // la mascota que acompaña a la persona
+  character        Character?
   items            UserItem[]
   seedTransactions SeedTransaction[]
   dailyChallenges  DailyChallenge[]
@@ -351,6 +352,19 @@ model Avatar {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("avatars")
+}
+
+// Avatar humano de la persona (estilo Mii): piel, cara, cabello y ropa.
+// El aspecto se guarda como JSON validado en src/character/character.constants.ts.
+model Character {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  look      Json
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("characters")
 }
 
 model Item {

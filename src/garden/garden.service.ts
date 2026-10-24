@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { Item, ItemCategory, Plan, Prisma, SeedReason } from "@prisma/client";
 import { growthStage, MAX_GROWTH, UNLOCKS } from "../activities/activities.constants";
 import { effectivePlan } from "../common/access";
+import { CharacterLook, DEFAULT_LOOK } from "../character/character.constants";
 import { PrismaService } from "../prisma/prisma.service";
 import { GARDEN_COLS, GARDEN_ROWS } from "./garden.constants";
 
@@ -11,7 +12,7 @@ export class GardenService {
 
   async garden(userId: string) {
     const [profile, owned] = await Promise.all([
-      this.prisma.profile.findUniqueOrThrow({ where: { userId }, include: { user: { include: { avatar: true } } } }),
+      this.prisma.profile.findUniqueOrThrow({ where: { userId }, include: { user: { include: { avatar: true, character: true } } } }),
       this.prisma.userItem.findMany({
         where: { userId },
         include: { item: true, placement: true },
@@ -25,10 +26,14 @@ export class GardenService {
       seedsBalance: profile.seedsBalance,
       waterBalance: profile.waterBalance,
       grid: { cols: GARDEN_COLS, rows: GARDEN_ROWS },
+      // Aspecto del avatar humano; la mascota lo acompaña.
+      character: { ...DEFAULT_LOOK, ...((profile.user.character?.look as Partial<CharacterLook> | undefined) ?? {}) },
       avatar: profile.user.avatar && {
         species: profile.user.avatar.species,
         name: profile.user.avatar.name,
-        accessory: accessory ? { userItemId: accessory.id, emoji: accessory.item.emoji, name: accessory.item.name } : null,
+        accessory: accessory
+          ? { userItemId: accessory.id, slug: accessory.item.slug, emoji: accessory.item.emoji, name: accessory.item.name }
+          : null,
       },
       items: owned.map((owner) => ({
         userItemId: owner.id,
@@ -156,8 +161,8 @@ export class GardenService {
   async place(userId: string, userItemId: string, x: number, y: number) {
     const owned = await this.findOwned(userId, userItemId);
     const item = await this.prisma.item.findUniqueOrThrow({ where: { id: owned.itemId } });
-    if (item.category === ItemCategory.ACCESSORY) {
-      throw new BadRequestException("Los accesorios se le ponen a tu compañero, no se plantan");
+    if (item.category === ItemCategory.ACCESSORY || item.category === ItemCategory.CLOTHING) {
+      throw new BadRequestException("Eso se lo pones a tu avatar en «Mi avatar», no se planta");
     }
 
     const occupied = await this.prisma.gardenPlacement.findFirst({
