@@ -89,6 +89,11 @@ export class AuthService {
       throw new BadRequestException("La zona horaria no es válida");
     }
 
+    // Se revisa antes de crear: el error de clave duplicada no siempre dice qué campo chocó.
+    if (await this.prisma.user.findUnique({ where: { email: dto.email }, select: { id: true } })) {
+      throw new ConflictException("Ya existe una cuenta con ese correo. Entra con tu contraseña.");
+    }
+
     const passwordHash = await hashPassword(dto.password);
 
     // Reintenta si el código aleatorio ya existe (muy improbable).
@@ -117,7 +122,7 @@ export class AuthService {
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
           const target = String(err.meta?.target ?? "");
-          if (target.includes("email")) throw new ConflictException("Ya existe una cuenta con ese correo");
+          if (!target.includes("link")) throw new ConflictException("Ya existe una cuenta con ese correo. Entra con tu contraseña.");
           continue; // choque de código: se genera otro
         }
         throw err;
