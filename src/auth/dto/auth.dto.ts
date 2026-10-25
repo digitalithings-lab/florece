@@ -62,7 +62,7 @@ export class RegisterPsychologistDto {
   password: string;
 
   @IsString()
-  @Length(3, 80)
+  @Length(3, 80, { message: "Escribe tu nombre completo (de 3 a 80 caracteres)" })
   fullName: string;
 
   @IsString()
