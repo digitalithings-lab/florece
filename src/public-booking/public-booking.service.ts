@@ -91,7 +91,7 @@ export class PublicBookingService {
   }
 
   private async notifyPsychologist(psychologist: Psychologist, dto: PublicBookDto, startsAt: Date) {
-    const when = DateTime.fromJSDate(startsAt, { zone: psychologist.timezone }).setLocale("es").toFormat("cccc d 'de' LLLL, HH:mm");
+    const when = DateTime.fromJSDate(startsAt, { zone: psychologist.timezone }).setLocale("es").toFormat("cccc d 'de' LLLL, h:mm a");
     const reason = dto.reason.length > 140 ? `${dto.reason.slice(0, 137)}…` : dto.reason;
     const body = [
       "📅 *Nueva cita solicitada desde tu web*",
