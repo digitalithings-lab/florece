@@ -1,11 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import { Psychologist } from "@prisma/client";
+import { config } from "../config";
 import { SmsService } from "./sms.service";
 import { WhatsappService } from "./whatsapp.service";
 
 export type NotifyChannel = "whatsapp" | "sms" | null;
 
-// Avisa al psicólogo en su celular: por WhatsApp si activó CallMeBot; si no, por SMS si Twilio está configurado.
+// Avisa al psicólogo en su celular: por WhatsApp (su clave o WHATSAPP_NOTIFY_APIKEY); si no, por SMS si Twilio está configurado.
 @Injectable()
 export class PsychologistNotifier {
   constructor(
@@ -15,9 +16,8 @@ export class PsychologistNotifier {
 
   async notify(psychologist: Pick<Psychologist, "notifyPhone" | "notifyWhatsappKey">, text: string): Promise<NotifyChannel> {
     if (!psychologist.notifyPhone) return null;
-    if (psychologist.notifyWhatsappKey && (await this.whatsapp.send(psychologist.notifyPhone, psychologist.notifyWhatsappKey, text))) {
-      return "whatsapp";
-    }
+    const key = psychologist.notifyWhatsappKey || config.whatsappNotifyKey;
+    if (key && (await this.whatsapp.send(psychologist.notifyPhone, key, text))) return "whatsapp";
     if (this.sms.enabled && (await this.sms.send(psychologist.notifyPhone, text))) return "sms";
     return null;
   }

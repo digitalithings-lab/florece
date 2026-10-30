@@ -57,7 +57,7 @@ export class UpdatePsyProfileDto {
   notifyPhone?: string;
   @IsOptional()
   @ValidateIf((_o, v) => v !== "")
-  @Matches(/^[A-Za-z0-9]{4,20}$/, { message: "La clave de CallMeBot no es válida (son los números que te envió el bot)" })
+  @Matches(/^[A-Za-z0-9]{4,20}$/, { message: "La clave de TextMeBot o CallMeBot no es válida" })
   notifyWhatsappKey?: string;
 }
 

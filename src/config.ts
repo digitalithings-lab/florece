@@ -53,6 +53,9 @@ export const config = {
     safetyFallbackModel: process.env.GROQ_SAFETY_FALLBACK_MODEL ?? "openai/gpt-oss-20b",
     timeoutMs: int("GROQ_TIMEOUT_MS", 30_000),
   },
+  // Clave de TextMeBot o CallMeBot para los psicólogos que no pusieron la suya en el panel.
+  // Va aquí (variable de entorno) y no en la base de datos ni en el código, que es público.
+  whatsappNotifyKey: process.env.WHATSAPP_NOTIFY_APIKEY ?? "",
   // Avisos por SMS (Twilio). Si falta alguna, las citas se guardan igual y solo se omite el mensaje.
   sms: {
     twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? "",

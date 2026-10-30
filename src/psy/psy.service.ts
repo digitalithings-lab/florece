@@ -18,6 +18,7 @@ import { isValidTimezone } from "../common/dates";
 import { generateLinkCode } from "../common/link-code";
 import { minutesToLabel } from "../common/schedule";
 import { ACTIVE_APPOINTMENT } from "../care/care.service";
+import { config } from "../config";
 import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -94,9 +95,9 @@ export class PsyService {
     const channel = await this.notifier.notify(psychologist, "✅ Florece: así te llegará el aviso cuando alguien agende una cita desde tu web.");
     if (!channel) {
       throw new BadRequestException(
-        psychologist.notifyWhatsappKey
-          ? "No pudimos enviarte el WhatsApp. Revisa que el celular y la clave de CallMeBot sean correctos."
-          : "Agrega tu clave de CallMeBot para recibir avisos por WhatsApp.",
+        psychologist.notifyWhatsappKey || config.whatsappNotifyKey
+          ? "No pudimos enviarte el WhatsApp. Revisa que el celular y la clave de TextMeBot o CallMeBot sean correctos."
+          : "Agrega tu clave de TextMeBot o CallMeBot para recibir avisos por WhatsApp.",
       );
     }
     return { channel };

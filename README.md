@@ -23,6 +23,7 @@ Variables del servicio del backend:
 | `JOURNAL_ENCRYPTION_KEY` | `openssl rand -base64 32` (si se pierde, los diarios no se pueden leer) |
 | `GROQ_API_KEY` | clave de la consola de Groq |
 | `ADMIN_EMAILS` | correos con acceso de administración, separados por comas |
+| `WHATSAPP_NOTIFY_APIKEY` | opcional: clave de TextMeBot o CallMeBot para avisar por WhatsApp a los psicólogos que no pusieron la suya |
 | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | opcionales: SMS de respaldo. El aviso principal es por WhatsApp (CallMeBot), que cada psicólogo activa desde su perfil |
 
 Al arrancar, `npm start` aplica las migraciones pendientes, carga los catálogos (retos y preguntas guiadas) y levanta la API.
