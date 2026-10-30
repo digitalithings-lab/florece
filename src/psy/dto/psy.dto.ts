@@ -54,6 +54,10 @@ export class UpdatePsyProfileDto {
   @ValidateIf((_o, v) => v !== "")
   @Matches(/^\+[1-9]\d{7,14}$/, { message: "Escribe el celular con código de país, sin espacios (p. ej. +50760000000)" })
   notifyPhone?: string;
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== "")
+  @Matches(/^[A-Za-z0-9]{4,20}$/, { message: "La clave de CallMeBot no es válida (son los números que te envió el bot)" })
+  notifyWhatsappKey?: string;
 }
 
 export class PatientSettingsDto {

@@ -794,7 +794,8 @@ model Psychologist {
   // Agenda pública: personas sin cuenta reservan desde el sitio web del psicólogo (p. ej. EspacioVital).
   publicSlug           String?  @unique @map("public_slug")
   publicBookingEnabled Boolean  @default(false) @map("public_booking_enabled")
-  notifyPhone          String?  @map("notify_phone") // en formato E.164 (+50760000000), para avisos por SMS
+  notifyPhone          String?  @map("notify_phone") // en formato E.164 (+50760000000): avisos por WhatsApp o SMS
+  notifyWhatsappKey    String?  @map("notify_whatsapp_key") // clave de CallMeBot para avisarle por WhatsApp
 
   user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   slots              AvailabilitySlot[]

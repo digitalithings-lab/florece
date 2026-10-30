@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Put, Query } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { UserRole } from "@prisma/client";
 import { AuthUser, CurrentUser } from "../common/auth.decorators";
 import { Roles } from "../common/roles";
@@ -36,6 +37,13 @@ export class PsyController {
   @Patch("me")
   updateMe(@CurrentUser() user: AuthUser, @Body() dto: UpdatePsyProfileDto) {
     return this.psy.updateMe(user.id, dto);
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post("me/notify-test")
+  @HttpCode(200)
+  testNotification(@CurrentUser() user: AuthUser) {
+    return this.psy.testNotification(user.id);
   }
 
   @Post("me/link-code")

@@ -3,7 +3,7 @@ import { AppointmentSource, Psychologist } from "@prisma/client";
 import { DateTime } from "luxon";
 import { ACTIVE_APPOINTMENT, CareService, parseBirthDate } from "../care/care.service";
 import { todayIn } from "../common/schedule";
-import { SmsService } from "../notify/sms.service";
+import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { PublicBookDto } from "./dto/public-booking.dto";
 
@@ -20,7 +20,7 @@ export class PublicBookingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly care: CareService,
-    private readonly sms: SmsService,
+    private readonly notifier: PsychologistNotifier,
   ) {}
 
   async info(slug: string, from?: string, days = 21) {
@@ -78,7 +78,7 @@ export class PublicBookingService {
       guestPhone: dto.phone,
     });
 
-    const smsSent = await this.notifyPsychologist(psychologist, dto, startsAt);
+    const notifiedBy = await this.notifyPsychologist(psychologist, dto, startsAt);
 
     return {
       id: appointment.id,
@@ -86,24 +86,23 @@ export class PublicBookingService {
       endsAt: appointment.endsAt,
       status: appointment.status,
       timezone: psychologist.timezone,
-      psychologistNotified: smsSent,
+      psychologistNotified: notifiedBy !== null,
     };
   }
 
   private async notifyPsychologist(psychologist: Psychologist, dto: PublicBookDto, startsAt: Date) {
-    if (!psychologist.notifyPhone) return false;
     const when = DateTime.fromJSDate(startsAt, { zone: psychologist.timezone }).setLocale("es").toFormat("cccc d 'de' LLLL, HH:mm");
     const reason = dto.reason.length > 140 ? `${dto.reason.slice(0, 137)}…` : dto.reason;
     const body = [
-      "Nueva cita solicitada desde tu web",
-      `${dto.fullName} · ${dto.phone}`,
+      "📅 *Nueva cita solicitada desde tu web*",
+      `*${dto.fullName}* · ${dto.phone}`,
       when,
       `Motivo: ${reason}`,
       "Confírmala en tu panel de Florece.",
     ].join("\n");
-    const sent = await this.sms.send(psychologist.notifyPhone, body);
-    if (!sent) this.logger.warn(`Cita web creada sin aviso por SMS (psicólogo ${psychologist.id})`);
-    return sent;
+    const channel = await this.notifier.notify(psychologist, body);
+    if (!channel) this.logger.warn(`Cita web creada sin aviso al psicólogo ${psychologist.id}`);
+    return channel;
   }
 
   private async requirePublic(slug: string) {

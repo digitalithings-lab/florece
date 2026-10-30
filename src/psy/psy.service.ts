@@ -18,6 +18,7 @@ import { isValidTimezone } from "../common/dates";
 import { generateLinkCode } from "../common/link-code";
 import { minutesToLabel } from "../common/schedule";
 import { ACTIVE_APPOINTMENT } from "../care/care.service";
+import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   AppointmentActionDto,
@@ -34,7 +35,10 @@ const RISKY: RiskLevel[] = [RiskLevel.MODERATE, RiskLevel.HIGH, RiskLevel.IMMINE
 
 @Injectable()
 export class PsyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifier: PsychologistNotifier,
+  ) {}
 
   // ─── Perfil ──────────────────────────────────────────
 
@@ -68,6 +72,7 @@ export class PsyService {
         publicBookingEnabled: dto.publicBookingEnabled,
         publicSlug: dto.publicSlug === undefined ? undefined : dto.publicSlug || null,
         notifyPhone: dto.notifyPhone === undefined ? undefined : dto.notifyPhone || null,
+        notifyWhatsappKey: dto.notifyWhatsappKey === undefined ? undefined : dto.notifyWhatsappKey || null,
       },
     }).catch((err: unknown) => {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -79,6 +84,21 @@ export class PsyService {
       await this.prisma.profile.update({ where: { userId }, data: { displayName: dto.fullName.trim() } });
     }
     return this.formatProfile(updated);
+  }
+
+  // Envía un aviso de prueba al celular configurado, para comprobar WhatsApp o SMS.
+  async testNotification(userId: string) {
+    const psychologist = await this.require(userId);
+    if (!psychologist.notifyPhone) throw new BadRequestException("Primero guarda tu celular para avisos");
+    const channel = await this.notifier.notify(psychologist, "✅ Florece: así te llegará el aviso cuando alguien agende una cita desde tu web.");
+    if (!channel) {
+      throw new BadRequestException(
+        psychologist.notifyWhatsappKey
+          ? "No pudimos enviarte el WhatsApp. Revisa que el celular y la clave de CallMeBot sean correctos."
+          : "Agrega tu clave de CallMeBot para recibir avisos por WhatsApp.",
+      );
+    }
+    return { channel };
   }
 
   // Un código nuevo no afecta a los pacientes ya vinculados.
@@ -541,6 +561,7 @@ export class PsyService {
       publicBookingEnabled: p.publicBookingEnabled,
       publicSlug: p.publicSlug,
       notifyPhone: p.notifyPhone,
+      notifyWhatsappKey: p.notifyWhatsappKey,
       verified: p.verifiedAt !== null,
       active: p.active,
     };
