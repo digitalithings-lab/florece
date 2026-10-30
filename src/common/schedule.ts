@@ -16,9 +16,6 @@ export interface DaySlots {
   slots: { startsAt: string; endsAt: string; label: string }[];
 }
 
-// Minutos de descanso entre una sesión y la siguiente.
-const BUFFER_MINUTES = 10;
-
 // Horarios libres a partir del horario semanal, quitando bloqueos y citas ya ocupadas.
 // Todo se calcula en la zona horaria del psicólogo y se devuelve en ISO (UTC).
 export function freeSlots(params: {
@@ -26,6 +23,8 @@ export function freeSlots(params: {
   busy: BusyRange[];
   timezone: string;
   sessionMinutes: number;
+  /** Descanso entre una sesión y la siguiente. */
+  bufferMinutes?: number;
   fromDate: string; // YYYY-MM-DD
   days: number;
   now?: Date;
@@ -34,7 +33,7 @@ export function freeSlots(params: {
   const { rules, busy, timezone, sessionMinutes, fromDate, days, minNoticeHours } = params;
   const earliest = DateTime.fromJSDate(params.now ?? new Date()).plus({ hours: minNoticeHours });
   const firstDay = DateTime.fromISO(fromDate, { zone: timezone }).startOf("day");
-  const step = sessionMinutes + BUFFER_MINUTES;
+  const step = sessionMinutes + (params.bufferMinutes ?? 10);
   const result: DaySlots[] = [];
 
   for (let offset = 0; offset < days; offset++) {

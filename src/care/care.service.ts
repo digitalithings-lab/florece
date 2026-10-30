@@ -212,6 +212,7 @@ export class CareService {
       busy,
       timezone: psychologist.timezone,
       sessionMinutes: psychologist.sessionMinutes,
+      bufferMinutes: psychologist.bufferMinutes,
       fromDate,
       days,
       minNoticeHours: config.bookingMinHours,

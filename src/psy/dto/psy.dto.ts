@@ -40,6 +40,7 @@ export class UpdatePsyProfileDto {
   @IsOptional() @IsInt() @Min(0) @Max(10_000_000) sessionPriceCents?: number;
   @IsOptional() @Matches(/^[A-Z]{3}$/, { message: "currency debe ser un código de 3 letras, p. ej. MXN" }) currency?: string;
   @IsOptional() @IsInt() @Min(20) @Max(120) sessionMinutes?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(60) bufferMinutes?: number;
   @IsOptional() @IsString() timezone?: string;
   @IsOptional() @ValidateIf((_o, v) => v !== "") @IsUrl({}, { message: "El enlace de videollamada no es válido" }) defaultMeetingUrl?: string;
 

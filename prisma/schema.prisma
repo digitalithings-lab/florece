@@ -784,6 +784,7 @@ model Psychologist {
   sessionPriceCents Int       @map("session_price_cents")
   currency          String    @default("MXN") @db.Char(3)
   sessionMinutes    Int       @default(50) @map("session_minutes")
+  bufferMinutes     Int       @default(10) @map("buffer_minutes") // descanso entre una sesión y la siguiente
   verifiedAt        DateTime? @map("verified_at") @db.Timestamptz(6)
   active            Boolean   @default(true)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
