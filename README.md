@@ -23,6 +23,7 @@ Variables del servicio del backend:
 | `JOURNAL_ENCRYPTION_KEY` | `openssl rand -base64 32` (si se pierde, los diarios no se pueden leer) |
 | `GROQ_API_KEY` | clave de la consola de Groq |
 | `ADMIN_EMAILS` | correos con acceso de administración, separados por comas |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` | opcionales: SMS al psicólogo cuando alguien agenda desde su web |
 
 Al arrancar, `npm start` aplica las migraciones pendientes, carga los catálogos (retos y preguntas guiadas) y levanta la API.
 
@@ -74,6 +75,8 @@ Todas exigen `Authorization: Bearer <accessToken>`, salvo las marcadas como púb
 | GET / PUT / POST / DELETE | `/psy/availability…` | Horario semanal y bloqueos |
 | GET / PATCH | `/psy/appointments…` | Citas: confirmar, cancelar, completar, no asistió |
 | GET… | `/admin/…` | Estadísticas, psicólogos, catálogo de retos, líneas de ayuda y alertas (solo `ADMIN_EMAILS`) |
+| GET | `/public/booking/:slug` | Sin sesión: horario semanal y horas libres de un psicólogo con agenda pública |
+| POST | `/public/booking/:slug/appointments` | Sin sesión: pedir cita desde la web del psicólogo (avisa por SMS) |
 | GET | `/chat/usage` | Mensajes usados hoy y límite del plan |
 | GET / POST | `/chat/conversations` | Listar / crear conversaciones |
 | GET / POST | `/chat/conversations/:id/messages` | Historial / enviar mensaje |

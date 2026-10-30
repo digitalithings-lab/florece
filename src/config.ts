@@ -53,6 +53,12 @@ export const config = {
     safetyFallbackModel: process.env.GROQ_SAFETY_FALLBACK_MODEL ?? "openai/gpt-oss-20b",
     timeoutMs: int("GROQ_TIMEOUT_MS", 30_000),
   },
+  // Avisos por SMS (Twilio). Si falta alguna, las citas se guardan igual y solo se omite el mensaje.
+  sms: {
+    twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? "",
+    twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? "",
+    from: process.env.TWILIO_FROM ?? "", // número de Twilio en formato +1…
+  },
   chat: {
     dailyLimitFree: int("CHAT_LIMIT_FREE", 10),
     dailyLimitPremium: int("CHAT_LIMIT_PREMIUM", 30),

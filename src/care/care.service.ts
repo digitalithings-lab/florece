@@ -5,6 +5,7 @@ import {
   AppointmentModality,
   AppointmentStatus,
   CareLinkStatus,
+  Prisma,
   Psychologist,
   UserRole,
 } from "@prisma/client";
@@ -106,39 +107,14 @@ export class CareService {
     const startsAt = new Date(dto.startsAt);
     if (Number.isNaN(startsAt.getTime())) throw new BadRequestException("La fecha no es válida");
 
-    // Fecha de nacimiento real y de alguien con entre 5 y 120 años.
-    const birthDate = new Date(`${dto.birthDate}T00:00:00Z`);
-    const age = (Date.now() - birthDate.getTime()) / (365.25 * 24 * 3_600_000);
-    if (Number.isNaN(birthDate.getTime()) || birthDate.toISOString().slice(0, 10) !== dto.birthDate || age < 5 || age > 120) {
-      throw new BadRequestException("Revisa tu fecha de nacimiento");
-    }
+    const birthDate = parseBirthDate(dto.birthDate);
 
-    const appointment = await this.prisma.$transaction(async (tx) => {
-      // Bloqueo por psicólogo: dos reservas simultáneas no pueden tomar el mismo horario.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${psychologist.id}`}))`;
-
-      const day = await this.computeSlots(psychologist, isoDateIn(startsAt, psychologist.timezone), 1);
-      const slot = day[0]?.slots.find((s) => new Date(s.startsAt).getTime() === startsAt.getTime());
-      if (!slot) {
-        throw new ConflictException("Ese horario ya no está disponible. Elige otro, por favor.");
-      }
-
-      return tx.appointment.create({
-        data: {
-          patientId: userId,
-          psychologistId: psychologist.id,
-          startsAt,
-          endsAt: new Date(slot.endsAt),
-          status: AppointmentStatus.REQUESTED,
-          modality: AppointmentModality.VIDEO,
-          priceCents: psychologist.sessionPriceCents,
-          currency: psychologist.currency,
-          notesForPsychologist: dto.reason.trim(),
-          patientFullName: dto.fullName.trim(),
-          patientIdNumber: dto.idNumber.trim().toUpperCase(),
-          patientBirthDate: birthDate,
-        },
-      });
+    const appointment = await this.reserveSlot(psychologist, startsAt, {
+      patientId: userId,
+      notesForPsychologist: dto.reason.trim(),
+      patientFullName: dto.fullName.trim(),
+      patientIdNumber: dto.idNumber.trim().toUpperCase(),
+      patientBirthDate: birthDate,
     });
 
     return this.formatAppointment(appointment);
@@ -179,6 +155,40 @@ export class CareService {
   }
 
   // ─── Auxiliares ──────────────────────────────────────
+
+  /**
+   * Reserva una hora: bloquea la agenda del psicólogo, comprueba que la hora siga libre (sin otra cita,
+   * bloqueo ni fuera de horario) y crea la cita como solicitud. Lo usan la app y la agenda pública de la web.
+   */
+  async reserveSlot(
+    psychologist: Psychologist,
+    startsAt: Date,
+    data: Omit<Prisma.AppointmentUncheckedCreateInput, "psychologistId" | "startsAt" | "endsAt" | "status" | "priceCents" | "currency">,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      // Bloqueo por psicólogo: dos reservas simultáneas no pueden tomar el mismo horario.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${psychologist.id}`}))`;
+
+      const day = await this.computeSlots(psychologist, isoDateIn(startsAt, psychologist.timezone), 1);
+      const slot = day[0]?.slots.find((s) => new Date(s.startsAt).getTime() === startsAt.getTime());
+      if (!slot) {
+        throw new ConflictException("Ese horario ya no está disponible. Elige otro, por favor.");
+      }
+
+      return tx.appointment.create({
+        data: {
+          modality: AppointmentModality.VIDEO,
+          ...data,
+          psychologistId: psychologist.id,
+          startsAt,
+          endsAt: new Date(slot.endsAt),
+          status: AppointmentStatus.REQUESTED,
+          priceCents: psychologist.sessionPriceCents,
+          currency: psychologist.currency,
+        },
+      });
+    });
+  }
 
   async computeSlots(psychologist: Psychologist, fromDate: string, days: number) {
     // Ventana holgada (un día antes y dos después) para cubrir cualquier zona horaria.
@@ -260,6 +270,16 @@ export class CareService {
   }
 }
 
-function isoDateIn(date: Date, timezone: string): string {
+// Fecha de nacimiento real (AAAA-MM-DD) de alguien con entre 5 y 120 años.
+export function parseBirthDate(value: string): Date {
+  const birthDate = new Date(`${value}T00:00:00Z`);
+  const age = (Date.now() - birthDate.getTime()) / (365.25 * 24 * 3_600_000);
+  if (Number.isNaN(birthDate.getTime()) || birthDate.toISOString().slice(0, 10) !== value || age < 5 || age > 120) {
+    throw new BadRequestException("Revisa tu fecha de nacimiento");
+  }
+  return birthDate;
+}
+
+export function isoDateIn(date: Date, timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }

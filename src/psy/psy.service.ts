@@ -48,6 +48,10 @@ export class PsyService {
     const psychologist = await this.require(userId);
     if (dto.timezone && !isValidTimezone(dto.timezone)) throw new BadRequestException("La zona horaria no es válida");
 
+    if (dto.publicBookingEnabled && !(dto.publicSlug ?? psychologist.publicSlug)) {
+      throw new BadRequestException("Elige un enlace para tu agenda pública antes de activarla");
+    }
+
     const updated = await this.prisma.psychologist.update({
       where: { id: psychologist.id },
       data: {
@@ -61,7 +65,15 @@ export class PsyService {
         sessionMinutes: dto.sessionMinutes,
         timezone: dto.timezone,
         defaultMeetingUrl: dto.defaultMeetingUrl === undefined ? undefined : dto.defaultMeetingUrl || null,
+        publicBookingEnabled: dto.publicBookingEnabled,
+        publicSlug: dto.publicSlug === undefined ? undefined : dto.publicSlug || null,
+        notifyPhone: dto.notifyPhone === undefined ? undefined : dto.notifyPhone || null,
       },
+    }).catch((err: unknown) => {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        throw new ConflictException("Ese enlace ya lo usa otro psicólogo. Prueba con otro.");
+      }
+      throw err;
     });
     if (dto.fullName) {
       await this.prisma.profile.update({ where: { userId }, data: { displayName: dto.fullName.trim() } });
@@ -123,8 +135,8 @@ export class PsyService {
     return {
       activePatients,
       pendingRequests,
-      today: today.map((a) => this.formatAppointment(a, a.patient.profile?.displayName)),
-      upcoming: upcoming.map((a) => this.formatAppointment(a, a.patient.profile?.displayName)),
+      today: today.map((a) => this.formatAppointment(a, a.patient?.profile?.displayName)),
+      upcoming: upcoming.map((a) => this.formatAppointment(a, a.patient?.profile?.displayName)),
       recentResponses: recentCompletions.slice(0, 8).map((c) => ({
         id: c.id,
         patientId: c.routine.patientId,
@@ -432,7 +444,7 @@ export class PsyService {
       orderBy: { startsAt: "asc" },
       take: 200,
     });
-    return list.map((a) => this.formatAppointment(a, a.patient.profile?.displayName));
+    return list.map((a) => this.formatAppointment(a, a.patient?.profile?.displayName));
   }
 
   async actOnAppointment(userId: string, appointmentId: string, dto: AppointmentActionDto) {
@@ -476,7 +488,7 @@ export class PsyService {
       data,
       include: { patient: { include: { profile: true } } },
     });
-    return this.formatAppointment(updated, updated.patient.profile?.displayName);
+    return this.formatAppointment(updated, updated.patient?.profile?.displayName);
   }
 
   // ─── Auxiliares ──────────────────────────────────────
@@ -526,6 +538,9 @@ export class PsyService {
       timezone: p.timezone,
       defaultMeetingUrl: p.defaultMeetingUrl,
       linkCode: p.linkCode,
+      publicBookingEnabled: p.publicBookingEnabled,
+      publicSlug: p.publicSlug,
+      notifyPhone: p.notifyPhone,
       verified: p.verifiedAt !== null,
       active: p.active,
     };
@@ -556,7 +571,9 @@ export class PsyService {
     return {
       id: a.id,
       patientId: a.patientId,
-      patientName: patientName ?? null,
+      // Las citas de la web no tienen cuenta: se usa el nombre que escribió la persona.
+      patientName: patientName ?? a.patientFullName ?? null,
+      source: a.source,
       startsAt: a.startsAt,
       endsAt: a.endsAt,
       status: a.status,
@@ -572,6 +589,8 @@ export class PsyService {
             idNumber: a.patientIdNumber,
             birthDate: a.patientBirthDate ? a.patientBirthDate.toISOString().slice(0, 10) : null,
             age: a.patientBirthDate ? ageOn(a.patientBirthDate, a.startsAt) : null,
+            email: a.guestEmail,
+            phone: a.guestPhone,
           }
         : null,
     };

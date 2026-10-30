@@ -8,6 +8,8 @@ import { AuthModule } from "./auth/auth.module";
 import { CareModule } from "./care/care.module";
 import { PsyModule } from "./psy/psy.module";
 import { CharacterModule } from "./character/character.module";
+import { NotifyModule } from "./notify/notify.module";
+import { PublicBookingModule } from "./public-booking/public-booking.module";
 import { ChallengesModule } from "./challenges/challenges.module";
 import { ChatModule } from "./chat/chat.module";
 import { EmotionsModule } from "./emotions/emotions.module";
@@ -45,6 +47,8 @@ import { SafetyModule } from "./safety/safety.module";
     ActivitiesModule,
     EmotionsModule,
     CharacterModule,
+    NotifyModule,
+    PublicBookingModule,
   ],
   controllers: [HealthController],
   providers: [

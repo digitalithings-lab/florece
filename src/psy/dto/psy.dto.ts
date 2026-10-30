@@ -42,6 +42,18 @@ export class UpdatePsyProfileDto {
   @IsOptional() @IsInt() @Min(20) @Max(120) sessionMinutes?: number;
   @IsOptional() @IsString() timezone?: string;
   @IsOptional() @ValidateIf((_o, v) => v !== "") @IsUrl({}, { message: "El enlace de videollamada no es válido" }) defaultMeetingUrl?: string;
+
+  // Agenda pública en el sitio web del psicólogo.
+  @IsOptional() @IsBoolean() publicBookingEnabled?: boolean;
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== "")
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/, { message: "El enlace solo puede tener minúsculas, números y guiones (p. ej. nathalie-vera)" })
+  @Length(3, 40, { message: "El enlace debe tener entre 3 y 40 caracteres" })
+  publicSlug?: string;
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== "")
+  @Matches(/^\+[1-9]\d{7,14}$/, { message: "Escribe el celular con código de país, sin espacios (p. ej. +50760000000)" })
+  notifyPhone?: string;
 }
 
 export class PatientSettingsDto {
