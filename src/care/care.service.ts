@@ -9,9 +9,11 @@ import {
   Psychologist,
   UserRole,
 } from "@prisma/client";
+import { DateTime } from "luxon";
 import { normalizeLinkCode } from "../common/link-code";
 import { BusyRange, freeSlots, todayIn } from "../common/schedule";
 import { config } from "../config";
+import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { BookAppointmentDto } from "./dto/care.dto";
 
@@ -20,7 +22,10 @@ export const ACTIVE_APPOINTMENT: AppointmentStatus[] = [AppointmentStatus.REQUES
 
 @Injectable()
 export class CareService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifier: PsychologistNotifier,
+  ) {}
 
   async current(userId: string) {
     const link = await this.activeLink(userId);
@@ -116,6 +121,20 @@ export class CareService {
       patientIdNumber: dto.idNumber.trim().toUpperCase(),
       patientBirthDate: birthDate,
     });
+
+    // Aviso al psicólogo por WhatsApp o SMS; si falla, la cita igual queda creada.
+    const when = DateTime.fromJSDate(startsAt, { zone: psychologist.timezone }).setLocale("es").toFormat("cccc d 'de' LLLL, h:mm a");
+    const reason = dto.reason.trim();
+    await this.notifier.notify(
+      psychologist,
+      [
+        "📅 *Nueva cita solicitada desde la app*",
+        `*${dto.fullName.trim()}*`,
+        when,
+        `Motivo: ${reason.length > 140 ? `${reason.slice(0, 137)}…` : reason}`,
+        "Confírmala en tu panel de Florece.",
+      ].join("\n"),
+    );
 
     return this.formatAppointment(appointment);
   }
