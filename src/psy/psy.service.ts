@@ -20,6 +20,7 @@ import { minutesToLabel } from "../common/schedule";
 import { ACTIVE_APPOINTMENT } from "../care/care.service";
 import { config } from "../config";
 import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
+import { PushService } from "../notify/push.service";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   AppointmentActionDto,
@@ -28,6 +29,7 @@ import {
   CreateContentDto,
   CreateRoutineDto,
   RuleDto,
+  PushSubscriptionDto,
   UpdatePsyProfileDto,
   UpdateRoutineDto,
 } from "./dto/psy.dto";
@@ -39,6 +41,7 @@ export class PsyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifier: PsychologistNotifier,
+    private readonly push: PushService,
   ) {}
 
   // ─── Perfil ──────────────────────────────────────────
@@ -86,6 +89,37 @@ export class PsyService {
       await this.prisma.profile.update({ where: { userId }, data: { displayName: dto.fullName.trim() } });
     }
     return this.formatProfile(updated);
+  }
+
+  // ─── Avisos push en el navegador ─────────────────────
+
+  async pushStatus(userId: string) {
+    const psychologist = await this.require(userId);
+    return { enabled: this.push.enabled, publicKey: this.push.publicKey, devices: await this.push.devices(psychologist.id) };
+  }
+
+  async pushSubscribe(userId: string, dto: PushSubscriptionDto) {
+    if (!this.push.enabled) throw new BadRequestException("Los avisos push todavía no están configurados en el servidor");
+    const psychologist = await this.require(userId);
+    await this.push.subscribe(psychologist.id, dto);
+    return this.pushStatus(userId);
+  }
+
+  async pushUnsubscribe(userId: string, endpoint: string) {
+    const psychologist = await this.require(userId);
+    await this.push.unsubscribe(psychologist.id, endpoint);
+    return this.pushStatus(userId);
+  }
+
+  async pushTest(userId: string) {
+    const psychologist = await this.require(userId);
+    const sent = await this.push.send(psychologist.id, {
+      title: "🔔 Avisos activados",
+      body: "Así te llegará cada cita nueva que te agenden.",
+      url: "/perfil",
+    });
+    if (!sent) throw new BadRequestException("No pudimos enviar el aviso. Vuelve a activar las notificaciones en este dispositivo.");
+    return { devices: sent };
   }
 
   // Envía un aviso de prueba al celular configurado, para comprobar WhatsApp o SMS.

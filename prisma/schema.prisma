@@ -808,8 +808,24 @@ model Psychologist {
   routines           Routine[]
   contents           AssignedContent[]
   emotionOptions     EmotionOption[]
+  pushSubscriptions  PushSubscription[]
 
   @@map("psychologists")
+}
+
+// Navegadores del psicólogo que reciben avisos push (Web Push) cuando le agendan una cita.
+model PushSubscription {
+  id             String   @id @default(uuid()) @db.Uuid
+  psychologistId String   @map("psychologist_id") @db.Uuid
+  endpoint       String   @unique
+  p256dh         String
+  auth           String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  psychologist Psychologist @relation(fields: [psychologistId], references: [id], onDelete: Cascade)
+
+  @@index([psychologistId])
+  @@map("push_subscriptions")
 }
 
 // Vínculo entre una persona y su psicólogo asignado. Solo puede haber uno activo por persona.

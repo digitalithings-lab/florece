@@ -100,7 +100,11 @@ export class PublicBookingService {
       `Motivo: ${reason}`,
       "Confírmala en tu panel de Florece.",
     ].join("\n");
-    const channel = await this.notifier.notify(psychologist, body);
+    const channel = await this.notifier.notify(psychologist, body, {
+      title: "📅 Nueva cita desde tu web",
+      body: `${dto.fullName} · ${when}`,
+      url: "/agenda",
+    });
     if (!channel) this.logger.warn(`Cita web creada sin aviso al psicólogo ${psychologist.id}`);
     return channel;
   }

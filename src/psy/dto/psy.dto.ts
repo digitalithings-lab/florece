@@ -24,6 +24,24 @@ import {
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Solo servicios push de los navegadores (Chrome/Android, Firefox, Safari/iPhone, Edge): el backend hace POST a esta URL.
+const PUSH_ENDPOINT =
+  /^https:\/\/(fcm\.googleapis\.com|android\.googleapis\.com|updates\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9-]+\.notify\.windows\.com)\//;
+
+class PushKeysDto {
+  @IsString() @Length(20, 200) p256dh!: string;
+  @IsString() @Length(8, 100) auth!: string;
+}
+
+export class PushSubscriptionDto {
+  @IsString() @MaxLength(1000) @Matches(PUSH_ENDPOINT, { message: "Servicio de notificaciones no compatible" }) endpoint!: string;
+  @ValidateNested() @Type(() => PushKeysDto) keys!: PushKeysDto;
+}
+
+export class PushEndpointDto {
+  @IsString() @MaxLength(1000) endpoint!: string;
+}
+
 export class UpdatePsyProfileDto {
   @IsOptional() @IsString() @Length(3, 80) fullName?: string;
   @IsOptional() @IsString() @Length(3, 40) licenseNumber?: string;

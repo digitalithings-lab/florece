@@ -62,6 +62,12 @@ export const config = {
     twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? "",
     from: process.env.TWILIO_FROM ?? "", // número de Twilio en formato +1…
   },
+  // Avisos push del navegador (Web Push). Las claves se generan con `npx web-push generate-vapid-keys`.
+  push: {
+    publicKey: process.env.VAPID_PUBLIC_KEY ?? "",
+    privateKey: process.env.VAPID_PRIVATE_KEY ?? "",
+    subject: process.env.VAPID_SUBJECT ?? "mailto:soporte@florece.app",
+  },
   chat: {
     dailyLimitFree: int("CHAT_LIMIT_FREE", 10),
     dailyLimitPremium: int("CHAT_LIMIT_PREMIUM", 30),

@@ -15,6 +15,8 @@ import {
   ReorderDto,
   UpdateEmotionDto,
   PatientSettingsDto,
+  PushEndpointDto,
+  PushSubscriptionDto,
   UpdatePsyProfileDto,
   UpdateRoutineDto,
 } from "./dto/psy.dto";
@@ -44,6 +46,30 @@ export class PsyController {
   @HttpCode(200)
   testNotification(@CurrentUser() user: AuthUser) {
     return this.psy.testNotification(user.id);
+  }
+
+  @Get("me/push")
+  pushStatus(@CurrentUser() user: AuthUser) {
+    return this.psy.pushStatus(user.id);
+  }
+
+  @Post("me/push")
+  @HttpCode(200)
+  pushSubscribe(@CurrentUser() user: AuthUser, @Body() dto: PushSubscriptionDto) {
+    return this.psy.pushSubscribe(user.id, dto);
+  }
+
+  @Post("me/push/remove")
+  @HttpCode(200)
+  pushUnsubscribe(@CurrentUser() user: AuthUser, @Body() dto: PushEndpointDto) {
+    return this.psy.pushUnsubscribe(user.id, dto.endpoint);
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post("me/push/test")
+  @HttpCode(200)
+  pushTest(@CurrentUser() user: AuthUser) {
+    return this.psy.pushTest(user.id);
   }
 
   @Post("me/link-code")

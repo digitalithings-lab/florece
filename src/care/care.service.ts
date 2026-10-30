@@ -134,6 +134,7 @@ export class CareService {
         `Motivo: ${reason.length > 140 ? `${reason.slice(0, 137)}…` : reason}`,
         "Confírmala en tu panel de Florece.",
       ].join("\n"),
+      { title: "📅 Nueva cita desde la app", body: `${dto.fullName.trim()} · ${when}`, url: "/agenda" },
     );
 
     return this.formatAppointment(appointment);
