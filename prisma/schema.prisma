@@ -184,6 +184,11 @@ enum CareLinkStatus {
   ENDED
 }
 
+enum AppointmentCanceller {
+  PATIENT
+  PSYCHOLOGIST
+}
+
 enum AppointmentStatus {
   REQUESTED // la persona pidió la cita; falta que el psicólogo la confirme
   PENDING_PAYMENT
@@ -913,9 +918,14 @@ model Appointment {
   priceCents           Int                 @map("price_cents")
   currency             String              @db.Char(3)
   paymentRef           String?             @map("payment_ref") // id del pago en Stripe
-  notesForPsychologist String?             @map("notes_for_psychologist")
+  notesForPsychologist String?             @map("notes_for_psychologist") // motivo de la cita, escrito por la persona
+  // Datos que la persona escribe al agendar; solo los ve su psicólogo.
+  patientFullName      String?             @map("patient_full_name")
+  patientIdNumber      String?             @map("patient_id_number") // cédula o documento de identidad
+  patientBirthDate     DateTime?           @map("patient_birth_date") @db.Date
   cancelledAt          DateTime?           @map("cancelled_at") @db.Timestamptz(6)
   cancelReason         String?             @map("cancel_reason")
+  cancelledBy          AppointmentCanceller? @map("cancelled_by")
   createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 

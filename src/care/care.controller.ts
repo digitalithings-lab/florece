@@ -43,9 +43,15 @@ export class CareController {
     return this.care.appointments(user.id);
   }
 
+  // Lo que la persona escribió la última vez, para no pedírselo de nuevo.
+  @Get("booking-details")
+  bookingDetails(@CurrentUser() user: AuthUser) {
+    return this.care.bookingDetails(user.id);
+  }
+
   @Post("appointments")
   book(@CurrentUser() user: AuthUser, @Body() dto: BookAppointmentDto) {
-    return this.care.book(user.id, dto.startsAt, dto.note);
+    return this.care.book(user.id, dto);
   }
 
   @Post("appointments/:id/cancel")

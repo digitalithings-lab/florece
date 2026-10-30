@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   Appointment,
+  AppointmentCanceller,
   AppointmentStatus,
   AssignedContent,
   CareLinkStatus,
@@ -453,7 +454,11 @@ export class PsyService {
         if (!ACTIVE_APPOINTMENT.includes(appointment.status)) throw new ConflictException("Esta cita ya no está activa");
         data.status = AppointmentStatus.CANCELLED;
         data.cancelledAt = now;
-        data.cancelReason = dto.cancelReason?.trim() || "Cancelada por el psicólogo";
+        if ((dto.cancelReason?.trim().length ?? 0) < 5) {
+          throw new BadRequestException("Escribe el motivo de la cancelación (al menos 5 caracteres). Tu paciente lo verá en la app.");
+        }
+        data.cancelReason = dto.cancelReason!.trim();
+        data.cancelledBy = AppointmentCanceller.PSYCHOLOGIST;
         break;
       case "complete":
       case "no_show":
@@ -559,6 +564,25 @@ export class PsyService {
       meetingUrl: a.meetingUrl,
       note: a.notesForPsychologist,
       cancelReason: a.cancelReason,
+      cancelledBy: a.cancelledBy,
+      // Lo que la persona escribió al agendar.
+      patient: a.patientFullName
+        ? {
+            fullName: a.patientFullName,
+            idNumber: a.patientIdNumber,
+            birthDate: a.patientBirthDate ? a.patientBirthDate.toISOString().slice(0, 10) : null,
+            age: a.patientBirthDate ? ageOn(a.patientBirthDate, a.startsAt) : null,
+          }
+        : null,
     };
   }
+}
+
+// Años cumplidos en una fecha.
+function ageOn(birthDate: Date, on: Date): number {
+  const age = on.getUTCFullYear() - birthDate.getUTCFullYear();
+  const beforeBirthday =
+    on.getUTCMonth() < birthDate.getUTCMonth() ||
+    (on.getUTCMonth() === birthDate.getUTCMonth() && on.getUTCDate() < birthDate.getUTCDate());
+  return beforeBirthday ? age - 1 : age;
 }

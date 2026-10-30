@@ -1,9 +1,18 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { Appointment, AppointmentModality, AppointmentStatus, CareLinkStatus, Psychologist, UserRole } from "@prisma/client";
+import {
+  Appointment,
+  AppointmentCanceller,
+  AppointmentModality,
+  AppointmentStatus,
+  CareLinkStatus,
+  Psychologist,
+  UserRole,
+} from "@prisma/client";
 import { normalizeLinkCode } from "../common/link-code";
 import { BusyRange, freeSlots, todayIn } from "../common/schedule";
 import { config } from "../config";
 import { PrismaService } from "../prisma/prisma.service";
+import { BookAppointmentDto } from "./dto/care.dto";
 
 // Citas que ocupan un horario.
 export const ACTIVE_APPOINTMENT: AppointmentStatus[] = [AppointmentStatus.REQUESTED, AppointmentStatus.CONFIRMED];
@@ -56,7 +65,7 @@ export class CareService {
       // Las citas futuras con ese psicólogo se cancelan.
       this.prisma.appointment.updateMany({
         where: { patientId: userId, psychologistId: link.psychologistId, status: { in: ACTIVE_APPOINTMENT }, startsAt: { gt: new Date() } },
-        data: { status: AppointmentStatus.CANCELLED, cancelledAt: new Date(), cancelReason: "La persona se desvinculó" },
+        data: { status: AppointmentStatus.CANCELLED, cancelledAt: new Date(), cancelReason: "La persona se desvinculó", cancelledBy: AppointmentCanceller.PATIENT },
       }),
       // Y sus rutinas dejan de aparecer.
       this.prisma.routine.updateMany({
@@ -76,10 +85,33 @@ export class CareService {
     };
   }
 
-  async book(userId: string, startsAtIso: string, note?: string) {
+  async bookingDetails(userId: string) {
+    const [last, user] = await Promise.all([
+      this.prisma.appointment.findFirst({
+        where: { patientId: userId, patientFullName: { not: null } },
+        orderBy: { createdAt: "desc" },
+      }),
+      this.prisma.user.findUnique({ where: { id: userId }, include: { profile: true } }),
+    ]);
+    const birthDate = last?.patientBirthDate ?? user?.birthDate ?? null;
+    return {
+      fullName: last?.patientFullName ?? user?.profile?.displayName ?? "",
+      idNumber: last?.patientIdNumber ?? "",
+      birthDate: birthDate ? birthDate.toISOString().slice(0, 10) : "",
+    };
+  }
+
+  async book(userId: string, dto: BookAppointmentDto) {
     const psychologist = await this.requireLinkedPsychologist(userId);
-    const startsAt = new Date(startsAtIso);
+    const startsAt = new Date(dto.startsAt);
     if (Number.isNaN(startsAt.getTime())) throw new BadRequestException("La fecha no es válida");
+
+    // Fecha de nacimiento real y de alguien con entre 5 y 120 años.
+    const birthDate = new Date(`${dto.birthDate}T00:00:00Z`);
+    const age = (Date.now() - birthDate.getTime()) / (365.25 * 24 * 3_600_000);
+    if (Number.isNaN(birthDate.getTime()) || birthDate.toISOString().slice(0, 10) !== dto.birthDate || age < 5 || age > 120) {
+      throw new BadRequestException("Revisa tu fecha de nacimiento");
+    }
 
     const appointment = await this.prisma.$transaction(async (tx) => {
       // Bloqueo por psicólogo: dos reservas simultáneas no pueden tomar el mismo horario.
@@ -101,7 +133,10 @@ export class CareService {
           modality: AppointmentModality.VIDEO,
           priceCents: psychologist.sessionPriceCents,
           currency: psychologist.currency,
-          notesForPsychologist: note?.trim() || null,
+          notesForPsychologist: dto.reason.trim(),
+          patientFullName: dto.fullName.trim(),
+          patientIdNumber: dto.idNumber.trim().toUpperCase(),
+          patientBirthDate: birthDate,
         },
       });
     });
@@ -138,7 +173,7 @@ export class CareService {
 
     const updated = await this.prisma.appointment.update({
       where: { id: appointment.id },
-      data: { status: AppointmentStatus.CANCELLED, cancelledAt: new Date(), cancelReason: "Cancelada por la persona" },
+      data: { status: AppointmentStatus.CANCELLED, cancelledAt: new Date(), cancelReason: "Cancelada por la persona", cancelledBy: AppointmentCanceller.PATIENT },
     });
     return this.formatAppointment(updated);
   }
@@ -220,6 +255,7 @@ export class CareService {
       meetingUrl: a.status === AppointmentStatus.CONFIRMED ? a.meetingUrl : null,
       note: a.notesForPsychologist,
       cancelReason: a.cancelReason,
+      cancelledBy: a.cancelledBy,
     };
   }
 }
