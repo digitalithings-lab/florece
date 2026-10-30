@@ -20,8 +20,8 @@ export class WhatsappService {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
       const body = await response.text();
-      // Ambos responden texto o HTML; los fallos traen «error» o «invalid» en el cuerpo.
-      if (!response.ok || /error|invalid/i.test(body)) {
+      // Ambos responden texto o HTML; los fallos traen «error», «invalid» o, en TextMeBot sin WhatsApp vinculado, «don't have».
+      if (!response.ok || /error|invalid|don'?t have|add a phone/i.test(body)) {
         this.logger.error(`${provider} respondió ${response.status}: ${body.replace(/<[^>]+>/g, " ").slice(0, 200)}`);
         return false;
       }
