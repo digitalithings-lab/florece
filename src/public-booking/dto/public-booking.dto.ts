@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { Equals, IsEmail, IsEmpty, IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, Min, ValidateNested } from "class-validator";
+import { Equals, IsEmail, IsIn, IsEmpty, IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, Min, ValidateNested } from "class-validator";
 import { RecurrenceDto } from "../../care/dto/care.dto";
 
 const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
@@ -47,6 +47,11 @@ export class PublicBookDto {
   @IsString()
   @Length(5, 500, { message: "Cuéntale el motivo de la cita (al menos 5 caracteres)" })
   reason: string;
+
+  // Cómo quiere la sesión. Si no llega (clientes antiguos), se asume videollamada.
+  @IsOptional()
+  @IsIn(["VIDEO", "IN_PERSON"], { message: "Elige si la cita es virtual o presencial" })
+  modality?: "VIDEO" | "IN_PERSON";
 
   @Equals(true, { message: "Necesitamos tu autorización para agendar" })
   consent: boolean;

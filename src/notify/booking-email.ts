@@ -13,6 +13,7 @@ export interface BookingEmailData {
   idNumber?: string | null;
   birthDate?: string | null;
   reason: string;
+  modality: "VIDEO" | "IN_PERSON";
   psychologistName: string;
   timezone: string;
   sessionMinutes: number;
@@ -27,6 +28,7 @@ const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 const day = (d: Date, tz: string) => cap(DateTime.fromJSDate(d, { zone: tz }).setLocale("es").toFormat("cccc d 'de' LLLL 'de' yyyy"));
 const time = (d: Date, tz: string) => DateTime.fromJSDate(d, { zone: tz }).setLocale("es").toFormat("h:mm a");
 const placeOf = (tz: string) => (tz === "America/Panama" ? "hora de Panamá" : `hora de ${tz.split("/").pop()?.replace(/_/g, " ")}`);
+const modeLabel = (m: BookingEmailData["modality"]) => (m === "IN_PERSON" ? "Presencial" : "Virtual (videollamada)");
 const plural = (n: number) => (n === 1 ? "tu cita" : `tus ${n} citas`);
 
 function dateRows(data: BookingEmailData) {
@@ -42,7 +44,7 @@ function dateRows(data: BookingEmailData) {
               </td>
               <td style="padding:14px 16px 14px 12px;font-family:${FONT};" valign="middle">
                 <div style="font-size:16px;font-weight:700;color:${C.burgundy};">${esc(day(d, data.timezone))}</div>
-                <div style="font-size:14px;color:${C.muted};margin-top:2px;">${esc(time(d, data.timezone))} · ${data.sessionMinutes} min${data.startsAt.length > 1 ? ` · sesión ${i + 1}` : ""}</div>
+                <div style="font-size:14px;color:${C.muted};margin-top:2px;">${esc(time(d, data.timezone))} · ${data.sessionMinutes} min · ${modeLabel(data.modality)}${data.startsAt.length > 1 ? ` · sesión ${i + 1}` : ""}</div>
               </td>
             </tr>
           </table>
@@ -92,7 +94,7 @@ export function patientEmail(data: BookingEmailData) {
     section(`${label("¿Qué sigue?")}
       <table role="presentation" cellpadding="0" cellspacing="0" style="font-size:15px;line-height:1.55;">
         <tr><td valign="top" style="padding:0 10px 8px 0;color:${C.orange};font-weight:700;">1</td><td style="padding-bottom:8px;">${esc(data.psychologistName)} revisará tu solicitud y te <strong>confirmará por correo o teléfono</strong>.</td></tr>
-        <tr><td valign="top" style="padding:0 10px 8px 0;color:${C.orange};font-weight:700;">2</td><td style="padding-bottom:8px;">Al confirmar te indicará la modalidad (presencial o videollamada) y el precio de la sesión.</td></tr>
+        <tr><td valign="top" style="padding:0 10px 8px 0;color:${C.orange};font-weight:700;">2</td><td style="padding-bottom:8px;">Al confirmar te indicará el precio de la sesión y los detalles de tu modalidad (${esc(modeLabel(data.modality).toLowerCase())}).</td></tr>
         <tr><td valign="top" style="padding:0 10px 0 0;color:${C.orange};font-weight:700;">3</td><td>Si necesitas cambiar algo, responde a este correo y te ayudamos.</td></tr>
       </table>`),
     section(`<p style="margin:0;font-size:12px;line-height:1.6;color:${C.muted};">Este mensaje confirma que recibimos tu solicitud; la cita queda <strong>pendiente de confirmación</strong>. Tus datos son confidenciales.</p>`),
@@ -101,11 +103,11 @@ export function patientEmail(data: BookingEmailData) {
   const text = [
     `Hola ${data.patientName.split(" ")[0]}, recibimos tu solicitud de cita con ${data.psychologistName}${series}.`,
     "",
-    ...data.startsAt.map((d) => `• ${day(d, data.timezone)}, ${time(d, data.timezone)} (${data.sessionMinutes} min, ${placeOf(data.timezone)})`),
+    ...data.startsAt.map((d) => `• ${day(d, data.timezone)}, ${time(d, data.timezone)} (${data.sessionMinutes} min, ${modeLabel(data.modality)}, ${placeOf(data.timezone)})`),
     "",
     `Motivo: ${data.reason}`,
     "",
-    `${data.psychologistName} te confirmará por correo o teléfono y te indicará modalidad y precio. Si necesitas cambiar algo, responde a este correo.`,
+    `${data.psychologistName} te confirmará por correo o teléfono y te indicará el precio. Si necesitas cambiar algo, responde a este correo.`,
   ].join("\n");
   return { subject, html, text };
 }
@@ -123,6 +125,7 @@ export function psychologistEmail(data: BookingEmailData) {
     section(`${label("Datos de la persona")}<table role="presentation" cellpadding="0" cellspacing="0">
       ${row("Nombre", esc(data.patientName))}
       ${row("Correo", `<a href="mailto:${esc(data.patientEmail)}" style="color:${C.fuchsia};">${esc(data.patientEmail)}</a>`)}
+      ${row("Modalidad", esc(modeLabel(data.modality)))}
       ${row("Teléfono", `<a href="tel:${esc(data.patientPhone)}" style="color:${C.fuchsia};">${esc(data.patientPhone)}</a>${phoneDigits ? ` · <a href="https://wa.me/${phoneDigits}" style="color:${C.fuchsia};">WhatsApp</a>` : ""}`)}
       ${data.idNumber ? row("Cédula", esc(data.idNumber)) : ""}
       ${data.birthDate ? row("Nacimiento", esc(data.birthDate)) : ""}
@@ -139,6 +142,7 @@ export function psychologistEmail(data: BookingEmailData) {
     `Nombre: ${data.patientName}`,
     `Correo: ${data.patientEmail}`,
     `Teléfono: ${data.patientPhone}`,
+    `Modalidad: ${modeLabel(data.modality)}`,
     data.idNumber ? `Cédula: ${data.idNumber}` : "",
     `Motivo: ${data.reason}`,
     "",

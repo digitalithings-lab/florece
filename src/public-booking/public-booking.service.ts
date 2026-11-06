@@ -78,6 +78,7 @@ export class PublicBookingService {
     // Misma reserva que la app: bloquea la agenda y no permite tomar una hora ocupada.
     const appointment = await this.care.reserveSlot(psychologist, startsAt, {
       patientId: null,
+      modality: dto.modality === "IN_PERSON" ? AppointmentModality.IN_PERSON : AppointmentModality.VIDEO,
       source: AppointmentSource.WEB,
       notesForPsychologist: dto.reason,
       patientFullName: dto.fullName,
@@ -126,7 +127,7 @@ export class PublicBookingService {
 
         const created = await tx.appointment.create({
           data: {
-            modality: AppointmentModality.VIDEO,
+            modality: dto.modality === "IN_PERSON" ? AppointmentModality.IN_PERSON : AppointmentModality.VIDEO,
             patientId: null,
             source: AppointmentSource.WEB,
             notesForPsychologist: dto.reason,
@@ -200,6 +201,7 @@ export class PublicBookingService {
       idNumber: dto.idNumber?.toUpperCase() ?? null,
       birthDate: birthDate ? birthDate.toISOString().slice(0, 10) : null,
       reason: dto.reason,
+      modality: dto.modality === "IN_PERSON" ? "IN_PERSON" : "VIDEO",
       psychologistName: psychologist.fullName,
       timezone: psychologist.timezone,
       sessionMinutes: psychologist.sessionMinutes,
@@ -222,7 +224,7 @@ export class PublicBookingService {
     const body = [
       "📅 *Nueva cita solicitada desde tu web*",
       `*${dto.fullName}* · ${dto.phone}`,
-      when,
+      `${when} · ${dto.modality === "IN_PERSON" ? "Presencial" : "Virtual"}`,
       `Motivo: ${reason}`,
       "Confírmala en tu panel de Florece.",
     ].join("\n");

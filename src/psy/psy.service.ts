@@ -17,7 +17,7 @@ import { DateTime } from "luxon";
 import { isValidTimezone } from "../common/dates";
 import { generateLinkCode } from "../common/link-code";
 import { minutesToLabel } from "../common/schedule";
-import { ACTIVE_APPOINTMENT } from "../care/care.service";
+import { ACTIVE_APPOINTMENT, CareService } from "../care/care.service";
 import { config } from "../config";
 import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
 import { PushService } from "../notify/push.service";
@@ -42,6 +42,7 @@ export class PsyService {
     private readonly prisma: PrismaService,
     private readonly notifier: PsychologistNotifier,
     private readonly push: PushService,
+    private readonly care: CareService,
   ) {}
 
   // ─── Perfil ──────────────────────────────────────────
@@ -448,6 +449,13 @@ export class PsyService {
       rules: rules.map((r) => ({ ...r, startLabel: minutesToLabel(r.startMinute), endLabel: minutesToLabel(r.endMinute) })),
       blocks,
     };
+  }
+
+  // Horas libres de los próximos días (las mismas que ve quien pide cita): para el calendario del panel.
+  async freeSlots(userId: string, from: string | undefined, days: number) {
+    const psychologist = await this.require(userId);
+    const start = from ?? DateTime.now().setZone(psychologist.timezone).toFormat("yyyy-MM-dd");
+    return { timezone: psychologist.timezone, days: await this.care.computeSlots(psychologist, start, days) };
   }
 
   // Reemplaza el horario semanal completo.

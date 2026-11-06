@@ -186,3 +186,8 @@ export class AppointmentActionDto {
   @IsOptional() @ValidateIf((_o, v) => v !== "") @IsUrl({}, { message: "El enlace de videollamada no es válido" }) meetingUrl?: string;
   @IsOptional() @IsString() @MaxLength(300) cancelReason?: string;
 }
+
+export class SlotsQueryDto {
+  @IsOptional() @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "from debe tener formato AAAA-MM-DD" }) from?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(42) days?: number;
+}

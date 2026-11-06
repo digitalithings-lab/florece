@@ -17,6 +17,7 @@ import {
   PatientSettingsDto,
   PushEndpointDto,
   PushSubscriptionDto,
+  SlotsQueryDto,
   UpdatePsyProfileDto,
   UpdateRoutineDto,
 } from "./dto/psy.dto";
@@ -174,6 +175,11 @@ export class PsyController {
   @Get("availability")
   availability(@CurrentUser() user: AuthUser) {
     return this.psy.availability(user.id);
+  }
+
+  @Get("slots")
+  slots(@CurrentUser() user: AuthUser, @Query() query: SlotsQueryDto) {
+    return this.psy.freeSlots(user.id, query.from, query.days ?? 42);
   }
 
   @Put("availability/rules")

@@ -41,8 +41,8 @@ export const config = {
     .filter(Boolean),
   // Horas mínimas de anticipación para que la persona cancele una cita.
   cancelMinHours: int("APPOINTMENT_CANCEL_MIN_HOURS", 12),
-  // Horas mínimas de anticipación para reservar.
-  bookingMinHours: int("APPOINTMENT_BOOKING_MIN_HOURS", 2),
+  // Horas mínimas de anticipación para reservar: una cita del mismo día solo se puede pedir con 4 horas de margen.
+  bookingMinHours: int("APPOINTMENT_BOOKING_MIN_HOURS", 4),
   groq: {
     apiKey: process.env.GROQ_API_KEY ?? "",
     baseUrl: process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1",
