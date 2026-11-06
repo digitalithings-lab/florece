@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { Equals, IsEmail, IsIn, IsEmpty, IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, Min, ValidateNested } from "class-validator";
+import { ArrayMaxSize, Equals, IsArray, IsEmail, IsIn, IsEmpty, IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, Min, ValidateNested } from "class-validator";
 import { RecurrenceDto } from "../../care/dto/care.dto";
 
 const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
@@ -60,6 +60,19 @@ export class PublicBookDto {
   @ValidateNested()
   @Type(() => RecurrenceDto)
   recurrence?: RecurrenceDto;
+
+  // Citas extra que la persona eligió a mano (además de la primera): una sola solicitud, un solo CAPTCHA.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(11, { message: "Máximo 12 citas por solicitud" })
+  @IsISO8601({ strict: true }, { each: true })
+  extraStartsAt?: string[];
+
+  // Código del CAPTCHA (Cloudflare Turnstile). Obligatorio solo si el servidor tiene TURNSTILE_SECRET.
+  @IsOptional()
+  @IsString()
+  @Length(1, 2048)
+  captchaToken?: string;
 
   // Campo trampa: las personas no lo ven; si viene lleno, es un robot.
   @IsOptional()

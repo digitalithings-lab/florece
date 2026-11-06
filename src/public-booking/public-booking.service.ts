@@ -72,7 +72,18 @@ export class PublicBookingService {
     }
 
     if (dto.recurrence) {
-      return this.bookRecurring(psychologist, startsAt, dto, birthDate);
+      const dates: Date[] = [startsAt];
+      for (let i = 1; i < dto.recurrence.count; i++) dates.push(this.nextOccurrence(dates[i - 1], dto.recurrence.rule));
+      return this.bookSeries(psychologist, dates, dto.recurrence.rule, dto, birthDate);
+    }
+
+    // Días elegidos a mano: la primera cita más las fechas extra, todo en una sola solicitud verificada.
+    if (dto.extraStartsAt?.length) {
+      const extra = dto.extraStartsAt.map((iso) => new Date(iso));
+      if (extra.some((d) => Number.isNaN(d.getTime()))) throw new BadRequestException("Una de las fechas no es válida");
+      const unique = new Map<number, Date>([[startsAt.getTime(), startsAt], ...extra.map((d) => [d.getTime(), d] as [number, Date])]);
+      const dates = [...unique.values()].sort((a, b) => a.getTime() - b.getTime());
+      return this.bookSeries(psychologist, dates, "manual", dto, birthDate);
     }
 
     // Misma reserva que la app: bloquea la agenda y no permite tomar una hora ocupada.
@@ -107,13 +118,9 @@ export class PublicBookingService {
     return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
   }
 
-  private async bookRecurring(psychologist: Psychologist, startsAt: Date, dto: PublicBookDto, birthDate: Date | null) {
-    const { rule, count } = dto.recurrence!;
+  /** Reserva varias citas de una vez (serie automática o días elegidos a mano), bajo el mismo bloqueo de agenda. */
+  private async bookSeries(psychologist: Psychologist, dates: Date[], rule: "weekly" | "biweekly" | "manual", dto: PublicBookDto, birthDate: Date | null) {
     const groupId = randomUUID();
-    const dates: Date[] = [startsAt];
-    for (let i = 1; i < count; i++) {
-      dates.push(this.nextOccurrence(dates[i - 1], rule));
-    }
 
     const appointments = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${psychologist.id}`}))`;
@@ -157,11 +164,11 @@ export class PublicBookingService {
     }
 
     const first = appointments[0];
-    const ruleLabel = rule === "weekly" ? "semanales" : "cada 2 semanas";
+    const ruleLabel = rule === "weekly" ? "semanales" : rule === "biweekly" ? "cada 2 semanas" : "en las fechas que eligió";
     const when = DateTime.fromJSDate(first.startsAt, { zone: psychologist.timezone }).setLocale("es").toFormat("cccc d 'de' LLLL, h:mm a");
     const reason = dto.reason.length > 140 ? `${dto.reason.slice(0, 137)}…` : dto.reason;
     const body = [
-      `📅 *Nueva serie de ${appointments.length} citas recurrentes (${ruleLabel}) desde tu web*`,
+      `📅 *Nueva solicitud de ${appointments.length} citas (${ruleLabel}) desde tu web*`,
       `*${dto.fullName}* · ${dto.phone}`,
       `Primera cita: ${when}`,
       `Motivo: ${reason}`,

@@ -1,6 +1,7 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Ip, Param, Post, Query } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { Public } from "../common/auth.decorators";
+import { CaptchaService } from "./captcha.service";
 import { PublicBookDto, PublicSlotsQueryDto } from "./dto/public-booking.dto";
 import { PublicBookingService } from "./public-booking.service";
 
@@ -8,7 +9,10 @@ import { PublicBookingService } from "./public-booking.service";
 @Public()
 @Controller("public/booking")
 export class PublicBookingController {
-  constructor(private readonly booking: PublicBookingService) {}
+  constructor(
+    private readonly booking: PublicBookingService,
+    private readonly captcha: CaptchaService,
+  ) {}
 
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @Get(":slug")
@@ -19,7 +23,8 @@ export class PublicBookingController {
   // Límite estricto: nadie necesita pedir más de unas pocas citas por minuto.
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post(":slug/appointments")
-  book(@Param("slug") slug: string, @Body() dto: PublicBookDto) {
+  async book(@Param("slug") slug: string, @Body() dto: PublicBookDto, @Ip() ip: string) {
+    await this.captcha.verify(dto.captchaToken, ip);
     return this.booking.book(slug, dto);
   }
 }
