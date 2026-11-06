@@ -1,5 +1,6 @@
 import { Transform, Type } from "class-transformer";
-import { Equals, IsEmail, IsEmpty, IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
+import { Equals, IsEmail, IsEmpty, IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, Min, ValidateNested } from "class-validator";
+import { RecurrenceDto } from "../../care/dto/care.dto";
 
 const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
 
@@ -49,6 +50,11 @@ export class PublicBookDto {
 
   @Equals(true, { message: "Necesitamos tu autorización para agendar" })
   consent: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecurrenceDto)
+  recurrence?: RecurrenceDto;
 
   // Campo trampa: las personas no lo ven; si viene lleno, es un robot.
   @IsOptional()

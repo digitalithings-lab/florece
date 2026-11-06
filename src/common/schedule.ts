@@ -65,6 +65,10 @@ export function todayIn(timezone: string): string {
   return DateTime.now().setZone(timezone).toISODate()!;
 }
 
+export function isoDateIn(date: Date, timezone: string): string {
+  return DateTime.fromJSDate(date, { zone: timezone }).toISODate()!;
+}
+
 export function minutesToLabel(minutes: number): string {
   return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }

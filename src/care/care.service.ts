@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   Appointment,
@@ -114,6 +115,19 @@ export class CareService {
 
     const birthDate = parseBirthDate(dto.birthDate);
 
+    if (dto.recurrence) {
+      return this.bookRecurring(psychologist, startsAt, {
+        patientId: userId,
+        notesForPsychologist: dto.reason.trim(),
+        patientFullName: dto.fullName.trim(),
+        patientIdNumber: dto.idNumber.trim().toUpperCase(),
+        patientBirthDate: birthDate,
+        rule: dto.recurrence.rule,
+        count: dto.recurrence.count,
+        reason: dto.reason.trim(),
+      });
+    }
+
     const appointment = await this.reserveSlot(psychologist, startsAt, {
       patientId: userId,
       notesForPsychologist: dto.reason.trim(),
@@ -175,6 +189,92 @@ export class CareService {
   }
 
   // ─── Auxiliares ──────────────────────────────────────
+
+  private nextOccurrence(date: Date, rule: "weekly" | "biweekly"): Date {
+    const days = rule === "weekly" ? 7 : 14;
+    return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+  }
+
+  private async bookRecurring(
+    psychologist: Psychologist,
+    startsAt: Date,
+    data: {
+      patientId: string;
+      notesForPsychologist: string;
+      patientFullName: string;
+      patientIdNumber: string;
+      patientBirthDate: Date | null;
+      rule: "weekly" | "biweekly";
+      count: number;
+      reason: string;
+    },
+  ) {
+    const groupId = randomUUID();
+    const dates: Date[] = [startsAt];
+    for (let i = 1; i < data.count; i++) {
+      dates.push(this.nextOccurrence(dates[i - 1], data.rule));
+    }
+
+    const appointments = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${psychologist.id}`}))`;
+
+      const results: Appointment[] = [];
+      for (let i = 0; i < dates.length; i++) {
+        const d = dates[i];
+        const day = await this.computeSlots(psychologist, isoDateIn(d, psychologist.timezone), 1);
+        const slot = day[0]?.slots.find((s) => new Date(s.startsAt).getTime() === d.getTime());
+        if (!slot) continue;
+
+        const created = await tx.appointment.create({
+          data: {
+            modality: AppointmentModality.VIDEO,
+            patientId: data.patientId,
+            notesForPsychologist: data.notesForPsychologist,
+            patientFullName: data.patientFullName,
+            patientIdNumber: data.patientIdNumber,
+            patientBirthDate: data.patientBirthDate,
+            psychologistId: psychologist.id,
+            startsAt: d,
+            endsAt: new Date(slot.endsAt),
+            status: AppointmentStatus.REQUESTED,
+            priceCents: psychologist.sessionPriceCents,
+            currency: psychologist.currency,
+            recurrenceGroupId: groupId,
+            recurrenceRule: data.rule,
+            recurrenceIndex: i,
+          },
+        });
+        results.push(created);
+      }
+      return results;
+    });
+
+    if (appointments.length === 0) {
+      throw new ConflictException("No se pudieron reservar las citas en esas fechas. Intenta elegir otros horarios.");
+    }
+
+    const first = appointments[0];
+    const ruleLabel = data.rule === "weekly" ? "semanales" : "cada 2 semanas";
+    const when = DateTime.fromJSDate(first.startsAt, { zone: psychologist.timezone }).setLocale("es").toFormat("cccc d 'de' LLLL, h:mm a");
+    await this.notifier.notify(
+      psychologist,
+      [
+        `📅 *Nueva serie de ${appointments.length} citas recurrentes (${ruleLabel})*`,
+        `*${data.patientFullName}*`,
+        `Primera cita: ${when}`,
+        `Motivo: ${data.reason.length > 120 ? `${data.reason.slice(0, 117)}…` : data.reason}`,
+        "Confírmalas en tu panel de Florece.",
+      ].join("\n"),
+      { title: "📅 Citas recurrentes solicitadas", body: `${data.patientFullName} · ${appointments.length} citas`, url: "/agenda" },
+    );
+
+    return {
+      recurring: true as const,
+      count: appointments.length,
+      rule: data.rule,
+      appointments: appointments.map((a) => this.formatAppointment(a)),
+    };
+  }
 
   /**
    * Reserva una hora: bloquea la agenda del psicólogo, comprueba que la hora siga libre (sin otra cita,

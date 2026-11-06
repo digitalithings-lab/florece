@@ -1,5 +1,18 @@
 import { Type } from "class-transformer";
-import { IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from "class-validator";
+import { IsEnum, IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, MaxLength, Min, ValidateNested } from "class-validator";
+
+export type RecurrenceRule = "weekly" | "biweekly";
+
+export class RecurrenceDto {
+  @IsEnum(["weekly", "biweekly"], { message: "La regla de recurrencia debe ser weekly o biweekly" })
+  rule: RecurrenceRule;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(2, { message: "Mínimo 2 citas para una serie recurrente" })
+  @Max(12, { message: "Máximo 12 citas para una serie recurrente" })
+  count: number;
+}
 
 export class LinkCodeDto {
   @IsString()
@@ -39,4 +52,9 @@ export class BookAppointmentDto {
   @IsString()
   @Length(5, 500, { message: "Cuéntale a tu psicólogo/a el motivo de la cita (al menos 5 caracteres)" })
   reason: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RecurrenceDto)
+  recurrence?: RecurrenceDto;
 }

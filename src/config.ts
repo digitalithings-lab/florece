@@ -62,6 +62,24 @@ export const config = {
     twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? "",
     from: process.env.TWILIO_FROM ?? "", // número de Twilio en formato +1…
   },
+  // Correos de confirmación de citas (SMTP). Con Gmail: MAIL_USER = la cuenta y MAIL_PASS = una «contraseña de aplicación».
+  // Si falta MAIL_USER o MAIL_PASS, las citas se guardan igual y solo se omite el correo.
+  mail: {
+    host: process.env.MAIL_HOST ?? "smtp.gmail.com",
+    port: int("MAIL_PORT", 465),
+    user: process.env.MAIL_USER ?? "",
+    pass: (process.env.MAIL_PASS ?? "").replace(/\s+/g, ""),
+    fromName: process.env.MAIL_FROM_NAME ?? "EspacioVital",
+    // Dirección que envía; por defecto, la misma cuenta SMTP.
+    from: process.env.MAIL_FROM ?? process.env.MAIL_USER ?? "",
+    // A dónde llega el aviso de cada cita nueva (la psicóloga). Por defecto, la misma cuenta que envía.
+    notifyTo: (process.env.MAIL_NOTIFY_TO ?? process.env.MAIL_FROM ?? process.env.MAIL_USER ?? "")
+      .split(",")
+      .map((email) => email.trim())
+      .filter(Boolean),
+    // Dirección pública del sitio, para los enlaces del correo.
+    siteUrl: process.env.SITE_URL ?? "https://espaciovitalpsic.site",
+  },
   // Avisos push del navegador (Web Push). Las claves se generan con `npx web-push generate-vapid-keys`.
   push: {
     publicKey: process.env.VAPID_PUBLIC_KEY ?? "",

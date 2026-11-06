@@ -219,8 +219,120 @@ async function main() {
     }
   }
 
+  // Retiros y viajes vivenciales (Tour de Chicas 2027)
+  const retreats2027 = [
+    {
+      slug: "san-blas-2027",
+      name: "Pasadía San Blas · Guna Yala",
+      setting: "Archipiélago & Playas Vírgenes",
+      place: "Guna Yala · San Blas",
+      icon: "sailboat",
+      startDate: new Date("2027-01-03T00:00:00Z"),
+      endDate: new Date("2027-01-03T23:59:59Z"),
+      spotsLeft: 25,
+      totalSpots: 25,
+      price: 140.0,
+      deposit: 20.0,
+      featured: false,
+      tone: "clay",
+      highlights: [
+        "Transporte terrestre y en lancha ida y vuelta (Pma Oeste y Albrook)",
+        "Tour a Isla Perro, Isla Diablo y Piscina Natural de estrellas",
+        "Almuerzo incluido (pollo o pescado) e impuestos comarcales",
+      ],
+    },
+    {
+      slug: "isla-grande-2027",
+      name: "Tour Isla Grande",
+      setting: "Caribe & Costa Arriba",
+      place: "Isla Grande · Colón",
+      icon: "waves",
+      startDate: new Date("2027-01-17T00:00:00Z"),
+      endDate: new Date("2027-01-17T23:59:59Z"),
+      spotsLeft: 20,
+      totalSpots: 20,
+      price: 65.0,
+      deposit: 10.0,
+      featured: false,
+      tone: "leaf",
+      highlights: [
+        "Transporte terrestre y marítimo ida y vuelta con seguro",
+        "Uso de instalaciones del hotel (playa privada, jardines, duchas)",
+        "Almuerzo caribeño con bebida + tour panorámico y piscina natural",
+      ],
+    },
+    {
+      slug: "venas-azules-2027",
+      name: "Venas Azules + Playa Blanca",
+      setting: "Manglar & Aguas Cristalinas",
+      place: "Portobelo · Colón",
+      icon: "sparkles",
+      startDate: new Date("2027-01-31T00:00:00Z"),
+      endDate: new Date("2027-01-31T23:59:59Z"),
+      spotsLeft: 18,
+      totalSpots: 18,
+      price: 55.0,
+      deposit: 10.0,
+      featured: true,
+      tone: "lilac",
+      highlights: [
+        "Visita histórica a las Ruinas de Portobelo e Iglesia",
+        "Recorrido por Venas Azules en Isla del Padre",
+        "Almuerzo caribeño, máscara de snorkel y kayak en Playa Blanca",
+      ],
+    },
+    {
+      slug: "isla-iguana-2027",
+      name: "Aventura Isla Iguana",
+      setting: "Refugio Silvestre & Pacífico",
+      place: "Pedasí · Los Santos",
+      icon: "compass",
+      startDate: new Date("2027-02-07T00:00:00Z"),
+      endDate: new Date("2027-02-07T23:59:59Z"),
+      spotsLeft: 15,
+      totalSpots: 15,
+      price: 80.5,
+      deposit: 15.0,
+      featured: false,
+      tone: "honey",
+      highlights: [
+        "Pasadía en isla de roca volcánica y refugio silvestre",
+        "Senderos interpretativos y snorkel en arrecifes de coral",
+        "Parada cultural en la Plaza de Pedasí y almuerzo típico",
+      ],
+    },
+    {
+      slug: "golfo-chiriqui-2027",
+      name: "Expedición Golfo de Chiriquí",
+      setting: "Parque Marino & Islas del Pacífico",
+      place: "Boca Chica · Chiriquí",
+      icon: "mountain",
+      startDate: new Date("2027-02-21T00:00:00Z"),
+      endDate: new Date("2027-02-21T23:59:59Z"),
+      spotsLeft: 16,
+      totalSpots: 16,
+      price: 70.5,
+      deposit: 15.0,
+      featured: false,
+      tone: "leaf",
+      highlights: [
+        "Tour acuático a Isla Bolaños, Isla Gámez e Isla Paridas",
+        "Transporte nocturno para amanecer en el destino",
+        "Almuerzo típico tradicional (tipo mono) incluido",
+      ],
+    },
+  ];
+
+  for (const retreat of retreats2027) {
+    await prisma.retreat.upsert({
+      where: { slug: retreat.slug },
+      create: retreat,
+      update: retreat,
+    });
+  }
+
   console.log(
-    `Seed listo: ${challenges.length} retos, ${journalPrompts.length} preguntas guiadas, ${items.length} objetos del jardín`,
+    `Seed listo: ${challenges.length} retos, ${journalPrompts.length} preguntas guiadas, ${items.length} objetos del jardín, ${retreats2027.length} eventos de 2027`,
   );
 }
 

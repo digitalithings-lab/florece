@@ -955,6 +955,9 @@ model Appointment {
   cancelReason         String?             @map("cancel_reason")
   cancelledBy          AppointmentCanceller? @map("cancelled_by")
   source               AppointmentSource   @default(APP)
+  recurrenceGroupId    String?             @map("recurrence_group_id") @db.Uuid
+  recurrenceRule       String?             @map("recurrence_rule") // human label e.g. "weekly" | "biweekly"
+  recurrenceIndex      Int?                @map("recurrence_index") // 0-based position in the series
   guestEmail           String?             @map("guest_email")
   guestPhone           String?             @map("guest_phone")
   createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -1028,4 +1031,28 @@ model AssignedContent {
 
   @@index([patientId, completedAt])
   @@map("assigned_content")
+}
+
+// Retiros y viajes vivenciales (Tour de Chicas 2027)
+model Retreat {
+  id         String   @id @default(uuid()) @db.Uuid
+  slug       String   @unique
+  name       String
+  setting    String
+  place      String
+  icon       String   @default("sparkles")
+  startDate  DateTime @map("start_date") @db.Date
+  endDate    DateTime @map("end_date") @db.Date
+  spotsLeft  Int      @default(0) @map("spots_left")
+  totalSpots Int      @default(0) @map("total_spots")
+  price      Decimal  @db.Decimal(10, 2)
+  deposit    Decimal  @default(10.00) @db.Decimal(10, 2)
+  featured   Boolean  @default(false)
+  tone       String   @default("leaf")
+  highlights String[] @default([])
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([startDate])
+  @@map("retreats")
 }
