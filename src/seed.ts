@@ -222,6 +222,27 @@ async function main() {
   // Retiros y viajes vivenciales (Tour de Chicas 2027)
   const retreats2027 = [
     {
+      slug: "navidad-cine",
+      name: "Navidad en pijamas — Edición cine",
+      setting: "Navidad entre amigas",
+      place: "Panamá Oeste",
+      icon: "film",
+      startDate: new Date("2026-12-05T00:00:00Z"),
+      endDate: new Date("2026-12-05T23:59:59Z"),
+      spotsLeft: 5,
+      totalSpots: 5,
+      price: 8.0,
+      deposit: 0.0,
+      featured: true,
+      tone: "honey",
+      highlights: [
+        "Una película navideña para disfrutar acompañadas",
+        "Fotografías y dinámicas para conocernos",
+        "Una salida llena de espíritu navideño",
+        "Ven con tu pijama navideña favorita",
+      ],
+    },
+    {
       slug: "san-blas-2027",
       name: "Pasadía San Blas · Guna Yala",
       setting: "Archipiélago & Playas Vírgenes",
