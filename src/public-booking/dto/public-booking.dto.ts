@@ -1,5 +1,5 @@
 import { Transform, Type } from "class-transformer";
-import { ArrayMaxSize, Equals, IsArray, IsEmail, IsIn, IsEmpty, IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, Min, ValidateIf, ValidateNested } from "class-validator";
+import { ArrayMaxSize, Equals, IsArray, IsEmail, IsIn, IsDefined, IsEmpty, IsInt, IsISO8601, IsOptional, IsString, Length, Matches, Max, Min, ValidateIf, ValidateNested } from "class-validator";
 import { RecurrenceDto } from "../../care/dto/care.dto";
 import { cleaned } from "../../common/text";
 
@@ -86,6 +86,7 @@ export class PublicBookDto {
 
   // Datos de la pareja: obligatorios solo cuando clientType es COUPLE.
   @ValidateIf((o) => o.clientType === "COUPLE")
+  @IsDefined({ message: "Escribe los datos de tu pareja" })
   @ValidateNested()
   @Type(() => PartnerDto)
   partner?: PartnerDto;
