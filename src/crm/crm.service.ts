@@ -88,6 +88,9 @@ export class CrmService {
   }
 
   private async register(a: Appointment): Promise<CrmResult> {
+    if (!config.crm.apiKey) {
+      return { synced: false, error: "Falta configurar CRM_API_KEY en el servidor de Florece" };
+    }
     const people = this.people(a);
 
     // El CRM exige estos datos; si falta alguno, se avisa cuál para completarlo a mano.
@@ -117,7 +120,7 @@ export class CrmService {
 
       const response = await fetch(`${config.crm.apiUrl}/crearcliente`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-api-key": config.crm.apiKey },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(8_000),
       });

@@ -83,6 +83,8 @@ export const config = {
   // CRM de EspacioVital: al confirmar una cita se registra a la persona (o a la pareja) como cliente.
   crm: {
     apiUrl: (process.env.CRM_API_URL ?? "https://backendcrmespaciovital.vercel.app/api/clientes").replace(/\/+$/, ""),
+    // Llave de servicio: el CRM solo acepta registros de clientes con esta cabecera (x-api-key). Mismo valor que CRM_API_KEY del CRM.
+    apiKey: process.env.CRM_API_KEY ?? "",
   },
   // CAPTCHA (Cloudflare Turnstile) de la agenda pública. Sin TURNSTILE_SECRET no se exige.
   turnstileSecret: process.env.TURNSTILE_SECRET ?? "",
