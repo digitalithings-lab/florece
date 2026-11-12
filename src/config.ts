@@ -80,6 +80,10 @@ export const config = {
     // Dirección pública del sitio, para los enlaces del correo.
     siteUrl: process.env.SITE_URL ?? "https://espaciovitalpsic.site",
   },
+  // CRM de EspacioVital: al confirmar una cita se registra a la persona (o a la pareja) como cliente.
+  crm: {
+    apiUrl: (process.env.CRM_API_URL ?? "https://backendcrmespaciovital.vercel.app/api/clientes").replace(/\/+$/, ""),
+  },
   // CAPTCHA (Cloudflare Turnstile) de la agenda pública. Sin TURNSTILE_SECRET no se exige.
   turnstileSecret: process.env.TURNSTILE_SECRET ?? "",
   // Avisos push del navegador (Web Push). Las claves se generan con `npx web-push generate-vapid-keys`.

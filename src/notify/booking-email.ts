@@ -23,6 +23,8 @@ export interface BookingEmailData {
   seriesLabel?: string;
 }
 
+/** Texto de una sola línea para el asunto: sin saltos de línea ni etiquetas. */
+const oneLine = (value: string) => value.replace(/[\r\n<>]+/g, " ").trim();
 const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const cap = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 const day = (d: Date, tz: string) => cap(DateTime.fromJSDate(d, { zone: tz }).setLocale("es").toFormat("cccc d 'de' LLLL 'de' yyyy"));
@@ -116,7 +118,7 @@ export function patientEmail(data: BookingEmailData) {
 export function psychologistEmail(data: BookingEmailData) {
   const n = data.startsAt.length;
   const series = data.seriesLabel ? ` (${data.seriesLabel})` : "";
-  const subject = n === 1 ? `Nueva cita: ${data.patientName} · ${day(data.startsAt[0], data.timezone)}, ${time(data.startsAt[0], data.timezone)}` : `Nuevas citas: ${data.patientName} · ${n} sesiones`;
+  const subject = n === 1 ? `Nueva cita: ${oneLine(data.patientName)} · ${day(data.startsAt[0], data.timezone)}, ${time(data.startsAt[0], data.timezone)}` : `Nuevas citas: ${oneLine(data.patientName)} · ${n} sesiones`;
   const phoneDigits = data.patientPhone.replace(/[^\d]/g, "");
   const row = (k: string, v: string) =>
     `<tr><td style="padding:7px 12px 7px 0;font-size:13px;color:${C.muted};white-space:nowrap;" valign="top">${k}</td><td style="padding:7px 0;font-size:15px;font-weight:600;" valign="top">${v}</td></tr>`;

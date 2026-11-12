@@ -180,8 +180,8 @@ export class AppointmentsQueryDto {
 }
 
 export class AppointmentActionDto {
-  @IsIn(["confirm", "cancel", "complete", "no_show", "update"])
-  action: "confirm" | "cancel" | "complete" | "no_show" | "update";
+  @IsIn(["confirm", "cancel", "complete", "no_show", "update", "crm_sync"])
+  action: "confirm" | "cancel" | "complete" | "no_show" | "update" | "crm_sync";
 
   @IsOptional() @ValidateIf((_o, v) => v !== "") @IsUrl({}, { message: "El enlace de videollamada no es válido" }) meetingUrl?: string;
   @IsOptional() @IsString() @MaxLength(300) cancelReason?: string;

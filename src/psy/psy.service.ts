@@ -18,6 +18,7 @@ import { isValidTimezone } from "../common/dates";
 import { generateLinkCode } from "../common/link-code";
 import { minutesToLabel } from "../common/schedule";
 import { ACTIVE_APPOINTMENT, CareService } from "../care/care.service";
+import { CrmService } from "../crm/crm.service";
 import { config } from "../config";
 import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
 import { PushService } from "../notify/push.service";
@@ -43,6 +44,7 @@ export class PsyService {
     private readonly notifier: PsychologistNotifier,
     private readonly push: PushService,
     private readonly care: CareService,
+    private readonly crm: CrmService,
   ) {}
 
   // ─── Perfil ──────────────────────────────────────────
@@ -545,13 +547,27 @@ export class PsyService {
       case "update":
         data.meetingUrl = meetingUrl;
         break;
+      case "crm_sync":
+        // Reintenta registrar en el CRM a una cita ya confirmada.
+        if (appointment.status !== AppointmentStatus.CONFIRMED) throw new ConflictException("Solo se registran en el CRM las citas confirmadas");
+        break;
     }
 
-    const updated = await this.prisma.appointment.update({
+    let updated = await this.prisma.appointment.update({
       where: { id: appointment.id },
       data,
       include: { patient: { include: { profile: true } } },
     });
+
+    // Al confirmar (o al reintentar), la persona o la pareja se registra como cliente en el CRM.
+    // Si el CRM falla, la cita queda confirmada igual y el panel muestra el aviso con «Reintentar».
+    if (dto.action === "confirm" || dto.action === "crm_sync") {
+      await this.crm.syncAppointment(appointment.id);
+      updated = await this.prisma.appointment.findUniqueOrThrow({
+        where: { id: appointment.id },
+        include: { patient: { include: { profile: true } } },
+      });
+    }
     return this.formatAppointment(updated, updated.patient?.profile?.displayName);
   }
 
@@ -659,6 +675,21 @@ export class PsyService {
             phone: a.guestPhone,
           }
         : null,
+      // Tipo de consulta y, si es pareja, los datos de la segunda persona.
+      clientType: a.clientType,
+      partner:
+        a.clientType === "COUPLE" && a.partnerFullName
+          ? {
+              fullName: a.partnerFullName,
+              idNumber: a.partnerIdNumber,
+              birthDate: a.partnerBirthDate ? a.partnerBirthDate.toISOString().slice(0, 10) : null,
+              age: a.partnerBirthDate ? ageOn(a.partnerBirthDate, a.startsAt) : null,
+              email: a.partnerEmail,
+              phone: a.partnerPhone,
+            }
+          : null,
+      // Registro en el CRM de EspacioVital.
+      crm: { synced: a.crmSyncedAt !== null, error: a.crmError },
     };
   }
 }

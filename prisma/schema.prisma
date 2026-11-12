@@ -203,6 +203,13 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+// Tipo de consulta que eligió la persona al agendar desde la web.
+enum ClientType {
+  INDIVIDUAL
+  COUPLE // pareja: la cita lleva los datos de las dos personas
+  CHILD // niños y adolescentes
+}
+
 enum AppointmentModality {
   VIDEO
   IN_PERSON
@@ -960,6 +967,17 @@ model Appointment {
   recurrenceIndex      Int?                @map("recurrence_index") // 0-based position in the series
   guestEmail           String?             @map("guest_email")
   guestPhone           String?             @map("guest_phone")
+  clientType           ClientType          @default(INDIVIDUAL) @map("client_type")
+  // Segunda persona cuando es una cita de pareja.
+  partnerFullName      String?             @map("partner_full_name")
+  partnerIdNumber      String?             @map("partner_id_number")
+  partnerBirthDate     DateTime?           @map("partner_birth_date") @db.Date
+  partnerEmail         String?             @map("partner_email")
+  partnerPhone         String?             @map("partner_phone")
+  // Registro en el CRM: id del grupo de pareja (igual para las dos personas), cuándo se registró y el último error.
+  crmGroupId           String?             @map("crm_group_id") @db.Uuid
+  crmSyncedAt          DateTime?           @map("crm_synced_at") @db.Timestamptz(6)
+  crmError             String?             @map("crm_error")
   createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
 

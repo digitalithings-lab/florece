@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { ConflictException, BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { Appointment, AppointmentModality, AppointmentSource, AppointmentStatus, Psychologist } from "@prisma/client";
+import { Appointment, AppointmentModality, AppointmentSource, AppointmentStatus, ClientType, Psychologist } from "@prisma/client";
 import { DateTime } from "luxon";
 import { ACTIVE_APPOINTMENT, CareService, parseBirthDate } from "../care/care.service";
 import { isoDateIn, todayIn } from "../common/schedule";
@@ -10,6 +10,17 @@ import { config } from "../config";
 import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { PublicBookDto } from "./dto/public-booking.dto";
+
+// Tipo de consulta y datos de la pareja que se guardan en cada cita.
+type ClientExtra = {
+  clientType: ClientType;
+  partnerFullName: string | null;
+  partnerIdNumber: string | null;
+  partnerBirthDate: Date | null;
+  partnerEmail: string | null;
+  partnerPhone: string | null;
+  crmGroupId: string | null;
+};
 
 // Máximo de solicitudes pendientes por correo, para frenar abusos.
 const MAX_PENDING_PER_EMAIL = 3;
@@ -64,6 +75,12 @@ export class PublicBookingService {
     if (Number.isNaN(startsAt.getTime())) throw new BadRequestException("La fecha no es válida");
     const birthDate = dto.birthDate ? parseBirthDate(dto.birthDate) : null;
 
+    // El formulario nuevo exige cédula y fecha de nacimiento (el CRM las necesita para registrar al cliente).
+    if (dto.clientType && (!dto.idNumber || !dto.birthDate)) {
+      throw new BadRequestException("La cédula y la fecha de nacimiento son obligatorias");
+    }
+    const extra = this.clientData(dto);
+
     const pending = await this.prisma.appointment.count({
       where: { psychologistId: psychologist.id, guestEmail: dto.email, status: { in: ACTIVE_APPOINTMENT }, startsAt: { gt: new Date() } },
     });
@@ -74,16 +91,16 @@ export class PublicBookingService {
     if (dto.recurrence) {
       const dates: Date[] = [startsAt];
       for (let i = 1; i < dto.recurrence.count; i++) dates.push(this.nextOccurrence(dates[i - 1], dto.recurrence.rule));
-      return this.bookSeries(psychologist, dates, dto.recurrence.rule, dto, birthDate);
+      return this.bookSeries(psychologist, dates, dto.recurrence.rule, dto, birthDate, extra);
     }
 
     // Días elegidos a mano: la primera cita más las fechas extra, todo en una sola solicitud verificada.
     if (dto.extraStartsAt?.length) {
-      const extra = dto.extraStartsAt.map((iso) => new Date(iso));
-      if (extra.some((d) => Number.isNaN(d.getTime()))) throw new BadRequestException("Una de las fechas no es válida");
-      const unique = new Map<number, Date>([[startsAt.getTime(), startsAt], ...extra.map((d) => [d.getTime(), d] as [number, Date])]);
+      const extraDates = dto.extraStartsAt.map((iso) => new Date(iso));
+      if (extraDates.some((d) => Number.isNaN(d.getTime()))) throw new BadRequestException("Una de las fechas no es válida");
+      const unique = new Map<number, Date>([[startsAt.getTime(), startsAt], ...extraDates.map((d) => [d.getTime(), d] as [number, Date])]);
       const dates = [...unique.values()].sort((a, b) => a.getTime() - b.getTime());
-      return this.bookSeries(psychologist, dates, "manual", dto, birthDate);
+      return this.bookSeries(psychologist, dates, "manual", dto, birthDate, extra);
     }
 
     // Misma reserva que la app: bloquea la agenda y no permite tomar una hora ocupada.
@@ -97,6 +114,7 @@ export class PublicBookingService {
       patientBirthDate: birthDate,
       guestEmail: dto.email,
       guestPhone: dto.phone,
+      ...extra,
     });
 
     const notifiedBy = await this.notifyPsychologist(psychologist, dto, startsAt);
@@ -113,13 +131,28 @@ export class PublicBookingService {
     };
   }
 
+  /** Tipo de consulta y datos de la pareja que se guardan en la cita. El grupo de pareja es el mismo para toda la serie. */
+  private clientData(dto: PublicBookDto): ClientExtra {
+    const clientType = (dto.clientType ?? "INDIVIDUAL") as ClientType;
+    const partner = clientType === "COUPLE" ? dto.partner : undefined;
+    return {
+      clientType,
+      partnerFullName: partner?.fullName ?? null,
+      partnerIdNumber: partner?.idNumber.toUpperCase() ?? null,
+      partnerBirthDate: partner ? parseBirthDate(partner.birthDate) : null,
+      partnerEmail: partner?.email ?? null,
+      partnerPhone: partner?.phone ?? null,
+      crmGroupId: partner ? randomUUID() : null,
+    };
+  }
+
   private nextOccurrence(date: Date, rule: "weekly" | "biweekly"): Date {
     const days = rule === "weekly" ? 7 : 14;
     return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
   }
 
   /** Reserva varias citas de una vez (serie automática o días elegidos a mano), bajo el mismo bloqueo de agenda. */
-  private async bookSeries(psychologist: Psychologist, dates: Date[], rule: "weekly" | "biweekly" | "manual", dto: PublicBookDto, birthDate: Date | null) {
+  private async bookSeries(psychologist: Psychologist, dates: Date[], rule: "weekly" | "biweekly" | "manual", dto: PublicBookDto, birthDate: Date | null, extra: ClientExtra) {
     const groupId = randomUUID();
 
     const appointments = await this.prisma.$transaction(async (tx) => {
@@ -143,6 +176,7 @@ export class PublicBookingService {
             patientBirthDate: birthDate,
             guestEmail: dto.email,
             guestPhone: dto.phone,
+            ...extra,
             psychologistId: psychologist.id,
             startsAt: d,
             endsAt: new Date(slot.endsAt),
@@ -169,7 +203,7 @@ export class PublicBookingService {
     const reason = dto.reason.length > 140 ? `${dto.reason.slice(0, 137)}…` : dto.reason;
     const body = [
       `📅 *Nueva solicitud de ${appointments.length} citas (${ruleLabel}) desde tu web*`,
-      `*${dto.fullName}* · ${dto.phone}`,
+      dto.clientType === "COUPLE" && dto.partner ? `*${dto.fullName}* y *${dto.partner.fullName}* (pareja) · ${dto.phone}` : `*${dto.fullName}* · ${dto.phone}`,
       `Primera cita: ${when}`,
       `Motivo: ${reason}`,
       "Confírmalas en tu panel de Florece.",
@@ -230,7 +264,7 @@ export class PublicBookingService {
     const reason = dto.reason.length > 140 ? `${dto.reason.slice(0, 137)}…` : dto.reason;
     const body = [
       "📅 *Nueva cita solicitada desde tu web*",
-      `*${dto.fullName}* · ${dto.phone}`,
+      dto.clientType === "COUPLE" && dto.partner ? `*${dto.fullName}* y *${dto.partner.fullName}* (pareja) · ${dto.phone}` : `*${dto.fullName}* · ${dto.phone}`,
       `${when} · ${dto.modality === "IN_PERSON" ? "Presencial" : "Virtual"}`,
       `Motivo: ${reason}`,
       "Confírmala en tu panel de Florece.",
