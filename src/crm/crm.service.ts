@@ -88,9 +88,9 @@ export class CrmService {
   }
 
   private async register(a: Appointment): Promise<CrmResult> {
-    if (!config.crm.apiKey) {
-      return { synced: false, error: "Falta configurar CRM_API_KEY en el servidor de Florece" };
-    }
+    // La llave es opcional hasta que el CRM empiece a exigirla; sin ella el CRM responderá 401 con un mensaje claro.
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (config.crm.apiKey) headers["x-api-key"] = config.crm.apiKey;
     const people = this.people(a);
 
     // El CRM exige estos datos; si falta alguno, se avisa cuál para completarlo a mano.
@@ -120,7 +120,7 @@ export class CrmService {
 
       const response = await fetch(`${config.crm.apiUrl}/crearcliente`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": config.crm.apiKey },
+        headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(8_000),
       });
@@ -134,6 +134,35 @@ export class CrmService {
       return { synced: false, error: `No se pudo registrar a ${p.fullName}: ${reason}` };
     }
 
-    return { synced: true, error: null };
+    return this.registerCharge(a, headers);
+  }
+
+  // Crea en la billetera del CRM el cobro de la cita (precio de la sesión). Es idempotente por cita.
+  // Si el pago ya se hizo en Florece (paymentRef), el cobro entra como pagado.
+  private async registerCharge(a: Appointment, headers: Record<string, string>): Promise<CrmResult> {
+    if (a.priceCents <= 0 || !a.patientIdNumber) return { synced: true, error: null };
+    const when = a.startsAt.toLocaleDateString("es", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
+    const body = {
+      cedula: a.patientIdNumber,
+      cita_ref: a.id,
+      concepto: `Sesión de terapia · ${when}`,
+      monto: a.priceCents / 100,
+      moneda: a.currency,
+      fecha_servicio: a.startsAt.toISOString(),
+      pagado: !!a.paymentRef,
+      metodo: a.paymentRef ? "Tarjeta (Stripe)" : undefined,
+      referencia: a.paymentRef ?? undefined,
+    };
+    const response = await fetch(`${config.crm.apiUrl}/cobros/cita`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8_000),
+    });
+    const json = (await response.json().catch(() => ({}))) as { ok?: boolean; message?: string };
+    if (response.ok && json.ok !== false) return { synced: true, error: null };
+    const reason = json.message?.trim() || `el CRM respondió ${response.status}`;
+    this.logger.warn(`CRM: no se creó el cobro de la cita ${a.id}: ${reason}`);
+    return { synced: false, error: `Cliente registrado, pero no se creó el cobro: ${reason}` };
   }
 }
