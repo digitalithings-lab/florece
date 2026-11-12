@@ -51,6 +51,7 @@ export class CrmAgendaController {
       meetingUrl: c.meetingUrl,
       note: c.notesForPsychologist,
       clientType: c.clientType,
+      crmGroupId: c.crmGroupId,
       priceCents: c.priceCents,
       currency: c.currency,
       paid: !!c.paymentRef,
@@ -63,7 +64,13 @@ export class CrmAgendaController {
       },
       partner:
         c.clientType === "COUPLE" && c.partnerFullName
-          ? { fullName: c.partnerFullName, idNumber: c.partnerIdNumber, email: c.partnerEmail, phone: c.partnerPhone }
+          ? {
+            fullName: c.partnerFullName,
+            idNumber: c.partnerIdNumber,
+            age: c.partnerBirthDate ? ageOn(c.partnerBirthDate, c.startsAt) : null,
+            email: c.partnerEmail,
+            phone: c.partnerPhone,
+          }
           : null,
     }));
   }

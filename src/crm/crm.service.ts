@@ -115,6 +115,7 @@ export class CrmService {
         telefono: p.phone,
         edad: Math.max(0, ageOf(p.birthDate!)),
         tipo: CRM_TYPE[a.clientType],
+        reutilizar: true, // si la cédula ya está en el CRM (cliente que vuelve), se reutiliza en vez de fallar
       };
       if (a.crmGroupId) body.idgrupo = a.crmGroupId;
 
