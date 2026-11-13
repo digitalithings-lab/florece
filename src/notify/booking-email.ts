@@ -154,3 +154,63 @@ export function psychologistEmail(data: BookingEmailData) {
     .join("\n");
   return { subject, html, text };
 }
+
+// ───────── Correos nuevos del CRM: cita confirmada y cita cancelada ─────────
+
+export interface ConfirmacionData extends BookingEmailData {
+  /** Enlace de la videollamada (solo citas virtuales). */
+  meetingUrl?: string | null;
+  /** Precio ya formateado, p. ej. «$50.00». */
+  price?: string | null;
+}
+
+/** Correo para la persona cuando su cita queda confirmada. */
+export function confirmationEmail(data: ConfirmacionData) {
+  const n = data.startsAt.length;
+  const subject = `Tu cita está confirmada · ${day(data.startsAt[0], data.timezone)}, ${time(data.startsAt[0], data.timezone)}`;
+  const link = data.modality === "VIDEO" && data.meetingUrl
+    ? section(`${label("Tu enlace de videollamada")}<p style="margin:0 0 12px 0;font-size:15px;line-height:1.6;">Entra a la hora de tu cita con este botón. No necesitas instalar nada: funciona desde el navegador del celular o la computadora.</p>
+      <a href="${esc(data.meetingUrl)}" style="display:inline-block;background:${C.orange};color:${C.burgundy};font-weight:700;font-size:15px;text-decoration:none;padding:13px 24px;border-radius:999px;">Entrar a la videollamada</a>
+      <p style="margin:12px 0 0 0;font-size:12px;color:${C.muted};word-break:break-all;">${esc(data.meetingUrl)}</p>`)
+    : "";
+  const price = data.price ? section(`${label("Valor de la sesión")}<p style="margin:0;font-size:18px;font-weight:700;color:${C.burgundy};">${esc(data.price)}</p>`) : "";
+  const body = [
+    section(`<p style="margin:0;font-size:16px;line-height:1.6;">Hola <strong>${esc(data.patientName.split(" ")[0])}</strong>, ${esc(data.psychologistName)} <strong>confirmó</strong> ${plural(n)}. Te esperamos:</p>`),
+    section(`${label(n === 1 ? "Tu cita" : "Tus citas")}<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${dateRows(data)}</table><p style="margin:4px 0 0 0;font-size:12px;color:${C.muted};">Todas las horas en ${placeOf(data.timezone)}.</p>`),
+    link,
+    price,
+    section(`<p style="margin:0;font-size:14px;line-height:1.6;color:${C.muted};">Si necesitas cambiar o cancelar la cita, responde a este correo con tiempo. ¡Gracias por tu confianza!</p>`),
+  ].join("");
+  const html = shell(`Tu cita con ${data.psychologistName} está confirmada`, "¡Tu cita está confirmada!", "Ya está todo listo para tu sesión.", body);
+  const text = [
+    `Hola ${data.patientName.split(" ")[0]}, ${data.psychologistName} confirmó ${plural(n)}:`,
+    "",
+    ...data.startsAt.map((d) => `• ${day(d, data.timezone)}, ${time(d, data.timezone)} (${data.sessionMinutes} min, ${modeLabel(data.modality)}, ${placeOf(data.timezone)})`),
+    data.modality === "VIDEO" && data.meetingUrl ? `\nVideollamada: ${data.meetingUrl}` : "",
+    data.price ? `Valor de la sesión: ${data.price}` : "",
+    "",
+    "Si necesitas cambiar o cancelar, responde a este correo.",
+  ].filter((l, i, a) => l !== "" || a[i - 1] !== "").join("\n");
+  return { subject, html, text };
+}
+
+/** Correo para la persona cuando su cita se cancela. */
+export function cancellationEmail(data: BookingEmailData, reason: string) {
+  const subject = `Tu cita fue cancelada · ${day(data.startsAt[0], data.timezone)}`;
+  const body = [
+    section(`<p style="margin:0;font-size:16px;line-height:1.6;">Hola <strong>${esc(data.patientName.split(" ")[0])}</strong>, lamentamos avisarte que se canceló tu cita:</p>`),
+    section(`<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${dateRows(data)}</table>`),
+    section(`${label("Motivo")}<p style="margin:0;font-size:15px;line-height:1.6;background:${C.cream};border-radius:14px;padding:14px 16px;">${esc(reason).replace(/\n/g, "<br>")}</p>`),
+    section(`<p style="margin:0;font-size:14px;line-height:1.6;color:${C.muted};">Puedes agendar otra cita cuando quieras desde <a href="${esc(config.mail.siteUrl)}/agendar" style="color:${C.fuchsia};font-weight:700;">${esc(config.mail.siteUrl.replace(/^https?:\/\//, ""))}/agendar</a> o respondiendo a este correo.</p>`),
+  ].join("");
+  const html = shell(`Se canceló tu cita con ${data.psychologistName}`, "Tu cita fue cancelada", "Te ayudamos a reagendar.", body);
+  const text = [
+    `Hola ${data.patientName.split(" ")[0]}, se canceló tu cita:`,
+    ...data.startsAt.map((d) => `• ${day(d, data.timezone)}, ${time(d, data.timezone)}`),
+    "",
+    `Motivo: ${reason}`,
+    "",
+    `Puedes agendar otra en ${config.mail.siteUrl}/agendar o respondiendo a este correo.`,
+  ].join("\n");
+  return { subject, html, text };
+}
