@@ -3,10 +3,10 @@ import {
   ServiceUnavailableException, UnauthorizedException,
 } from "@nestjs/common";
 import { Type } from "class-transformer";
-import { IsBoolean, IsEmail, IsIn, IsISO8601, IsOptional, IsString, Length, Matches, MaxLength, ValidateIf, ValidateNested, IsUrl } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsInt, Max, Min, IsEmail, IsIn, IsISO8601, IsOptional, IsString, Length, Matches, MaxLength, ValidateIf, ValidateNested, IsUrl } from "class-validator";
 import { Appointment, AppointmentModality, AppointmentSource, AppointmentStatus, ClientType, Psychologist } from "@prisma/client";
 import { randomUUID, timingSafeEqual } from "crypto";
-import { ACTIVE_APPOINTMENT, CareService, parseBirthDate } from "../care/care.service";
+import { ACTIVE_APPOINTMENT, CareService, isoDateIn, parseBirthDate } from "../care/care.service";
 import { cleanText } from "../common/text";
 import { config } from "../config";
 import { Public } from "../common/auth.decorators";
@@ -38,6 +38,12 @@ export class CrmActionDto {
 
   // En una cancelación: avisar o no a la persona por correo (por defecto sí).
   @IsOptional() @IsBoolean() notify?: boolean;
+
+  // Al confirmar: no enviar el correo (se envía uno solo para toda la serie).
+  @IsOptional() @IsBoolean() silent?: boolean;
+
+  // Con «resend»: otras citas de la misma persona que van en el mismo correo (serie).
+  @IsOptional() @IsArray() @ArrayMaxSize(11) @IsString({ each: true }) groupIds?: string[];
 }
 
 // Persona de una cita creada desde el CRM. Solo el nombre es obligatorio: lo demás se completa después en el expediente.
@@ -49,6 +55,11 @@ class CrmPersonDto {
   @IsOptional() @ValidateIf((_o, v) => v !== "") @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "La fecha de nacimiento debe ser AAAA-MM-DD" }) birthDate?: string;
 }
 
+class CrmRecurrenceDto {
+  @IsIn(["weekly", "biweekly"]) rule: "weekly" | "biweekly";
+  @IsInt() @Min(2) @Max(12) count: number;
+}
+
 // Cita creada a mano desde el CRM (por teléfono, WhatsApp, en persona…).
 export class CrmCreateDto extends CrmPersonDto {
   @IsISO8601({ strict: true }) startsAt: string;
@@ -58,6 +69,10 @@ export class CrmCreateDto extends CrmPersonDto {
   @IsOptional() @IsIn(["INDIVIDUAL", "COUPLE", "CHILD"]) clientType?: "INDIVIDUAL" | "COUPLE" | "CHILD";
   @IsOptional() @IsString() @MaxLength(500) reason?: string;
   @ValidateIf((o) => o.clientType === "COUPLE") @ValidateNested() @Type(() => CrmPersonDto) partner?: CrmPersonDto;
+
+  // Repetir: cada semana o cada 2 semanas (de 2 a 12 citas), o días elegidos a mano además de la primera.
+  @IsOptional() @ValidateNested() @Type(() => CrmRecurrenceDto) recurrence?: CrmRecurrenceDto;
+  @IsOptional() @IsArray() @ArrayMaxSize(11, { message: "Máximo 12 citas por solicitud" }) @IsISO8601({ strict: true }, { each: true }) extraStartsAt?: string[];
 }
 
 // API para el CRM (crmespacio). Solo con la llave de servicio (x-api-key = CRM_API_KEY); sin llave configurada, queda apagada.
@@ -166,7 +181,10 @@ export class CrmAgendaController {
 
     if (dto.action === "resend") {
       if (appointment.status !== AppointmentStatus.CONFIRMED) throw new BadRequestException("La cita aún no está confirmada");
-      correo = await this.sendConfirmation(appointment, psychologist);
+      const extra = dto.groupIds?.length
+        ? await this.prisma.appointment.findMany({ where: { id: { in: dto.groupIds }, guestEmail: appointment.guestEmail, status: AppointmentStatus.CONFIRMED } })
+        : [];
+      correo = await this.sendConfirmation(appointment, psychologist, extra.map((e) => e.startsAt));
     } else {
       await this.psy.actOnAppointment(psychologist.userId, id, {
         action: dto.action,
@@ -174,7 +192,7 @@ export class CrmAgendaController {
         meetingUrl: dto.meetingUrl,
       } as AppointmentActionDto);
       const updated = await this.prisma.appointment.findUniqueOrThrow({ where: { id } });
-      if (dto.action === "confirm") correo = await this.sendConfirmation(updated, psychologist);
+      if (dto.action === "confirm" && !dto.silent) correo = await this.sendConfirmation(updated, psychologist);
       if (dto.action === "cancel" && dto.notify !== false) correo = await this.sendCancellation(updated, psychologist, dto.cancelReason ?? "");
       return { appointment: this.item(updated, psychologist.timezone), correo };
     }
@@ -182,7 +200,7 @@ export class CrmAgendaController {
     return { appointment: this.item(fresh, psychologist.timezone), correo };
   }
 
-  private emailData(a: Appointment, p: Psychologist): BookingEmailData {
+  private emailData(a: Appointment, p: Psychologist, moreDates: Date[] = []): BookingEmailData {
     return {
       patientName: a.patientFullName ?? "",
       patientEmail: a.guestEmail ?? "",
@@ -192,7 +210,7 @@ export class CrmAgendaController {
       psychologistName: p.fullName,
       timezone: p.timezone,
       sessionMinutes: p.sessionMinutes,
-      startsAt: [a.startsAt],
+      startsAt: [a.startsAt, ...moreDates].sort((x, y) => x.getTime() - y.getTime()),
     };
   }
 
@@ -200,7 +218,7 @@ export class CrmAgendaController {
     return [a.guestEmail, a.partnerEmail].filter((e, i, all): e is string => !!e && e.includes("@") && all.indexOf(e) === i);
   }
 
-  private async sendConfirmation(a: Appointment, p: Psychologist) {
+  private async sendConfirmation(a: Appointment, p: Psychologist, moreDates: Date[] = []) {
     const to = this.recipients(a);
     if (!to.length) return "sin_correo" as const;
     if (!this.mail.enabled) return "no_configurado" as const;
@@ -209,7 +227,7 @@ export class CrmAgendaController {
       try { price = new Intl.NumberFormat("es", { style: "currency", currency: a.currency.trim() }).format(a.priceCents / 100); }
       catch { price = `${(a.priceCents / 100).toFixed(2)} ${a.currency}`; }
     }
-    const message = confirmationEmail({ ...this.emailData(a, p), meetingUrl: a.modality === "VIDEO" ? a.meetingUrl : null, price });
+    const message = confirmationEmail({ ...this.emailData(a, p, moreDates), meetingUrl: a.modality === "VIDEO" ? a.meetingUrl : null, price });
     const ok = await this.mail.send({ to, replyTo: config.mail.notifyTo[0] || config.mail.from, ...message });
     return ok ? ("enviado" as const) : ("error" as const);
   }
@@ -265,21 +283,72 @@ export class CrmAgendaController {
       crmGroupId: partner ? randomUUID() : null,
     };
 
-    let created: Appointment;
-    if (!dto.force) {
-      // Solo horas libres del horario de atención (igual que la agenda pública)
-      created = await this.care.reserveSlot(owner, startsAt, data);
-    } else {
-      const endsAt = new Date(startsAt.getTime() + owner.sessionMinutes * 60_000);
-      const overlap = await this.prisma.appointment.findFirst({
-        where: { psychologistId: owner.id, status: { in: ACTIVE_APPOINTMENT }, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
-      });
-      if (overlap) throw new ConflictException("Ya hay una cita en ese horario");
-      created = await this.prisma.appointment.create({
-        data: { ...data, psychologistId: owner.id, startsAt, endsAt, status: AppointmentStatus.REQUESTED, priceCents: owner.sessionPriceCents, currency: owner.currency },
-      });
+    // Fechas: una sola, una serie (semanal / cada 2 semanas) o días elegidos a mano
+    let dates: Date[] = [startsAt];
+    let rule: string | null = null;
+    if (dto.recurrence) {
+      rule = dto.recurrence.rule;
+      const step = (rule === "weekly" ? 7 : 14) * 86_400_000;
+      dates = Array.from({ length: dto.recurrence.count }, (_v, i) => new Date(startsAt.getTime() + i * step));
+    } else if (dto.extraStartsAt?.length) {
+      rule = "manual";
+      const unique = new Map<number, Date>([[startsAt.getTime(), startsAt], ...dto.extraStartsAt.map((iso) => new Date(iso)).map((d) => [d.getTime(), d] as [number, Date])]);
+      dates = [...unique.values()].sort((x, y) => x.getTime() - y.getTime());
     }
-    return { appointment: this.item(created, owner.timezone) };
+
+    // Una sola cita: igual que antes (con mensaje claro si el horario no sirve)
+    if (!rule) {
+      let created: Appointment;
+      if (!dto.force) {
+        created = await this.care.reserveSlot(owner, startsAt, data);
+      } else {
+        const endsAt = new Date(startsAt.getTime() + owner.sessionMinutes * 60_000);
+        const overlap = await this.prisma.appointment.findFirst({
+          where: { psychologistId: owner.id, status: { in: ACTIVE_APPOINTMENT }, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
+        });
+        if (overlap) throw new ConflictException("Ya hay una cita en ese horario");
+        created = await this.prisma.appointment.create({
+          data: { ...data, psychologistId: owner.id, startsAt, endsAt, status: AppointmentStatus.REQUESTED, priceCents: owner.sessionPriceCents, currency: owner.currency },
+        });
+      }
+      return { appointment: this.item(created, owner.timezone), appointments: [this.item(created, owner.timezone)], skipped: 0 };
+    }
+
+    // Serie: se reservan todas bajo el mismo bloqueo; las fechas ocupadas se omiten
+    const groupId = randomUUID();
+    const created = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`booking:${owner.id}`}))`;
+      const results: Appointment[] = [];
+      for (let i = 0; i < dates.length; i++) {
+        const d = dates[i];
+        let endsAt: Date | null = null;
+        if (!dto.force) {
+          const day = await this.care.computeSlots(owner, isoDateIn(d, owner.timezone), 1);
+          const slot = day[0]?.slots.find((s) => new Date(s.startsAt).getTime() === d.getTime());
+          if (slot) endsAt = new Date(slot.endsAt);
+        } else {
+          const end = new Date(d.getTime() + owner.sessionMinutes * 60_000);
+          const overlap = await tx.appointment.findFirst({
+            where: { psychologistId: owner.id, status: { in: ACTIVE_APPOINTMENT }, startsAt: { lt: end }, endsAt: { gt: d } },
+          });
+          if (!overlap) endsAt = end;
+        }
+        if (!endsAt) continue;
+        results.push(
+          await tx.appointment.create({
+            data: {
+              ...data, psychologistId: owner.id, startsAt: d, endsAt, status: AppointmentStatus.REQUESTED,
+              priceCents: owner.sessionPriceCents, currency: owner.currency,
+              recurrenceGroupId: groupId, recurrenceRule: rule, recurrenceIndex: i,
+            },
+          }),
+        );
+      }
+      return results;
+    });
+    if (created.length === 0) throw new ConflictException("No se pudieron reservar las citas en esas fechas. Revisa los horarios.");
+    const items = created.map((c) => this.item(c, owner.timezone));
+    return { appointment: items[0], appointments: items, skipped: dates.length - created.length };
   }
 
   // ─── Ajustes: perfil, horarios y bloqueos ─────────────
