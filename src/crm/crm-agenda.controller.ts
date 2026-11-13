@@ -1,10 +1,13 @@
 import {
-  BadRequestException, Body, Controller, Delete, Get, Headers, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Put, Query,
+  BadRequestException, Body, ConflictException, Controller, Delete, Get, Headers, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Put, Query,
   ServiceUnavailableException, UnauthorizedException,
 } from "@nestjs/common";
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, ValidateIf, IsUrl } from "class-validator";
-import { Appointment, AppointmentStatus, Psychologist } from "@prisma/client";
-import { timingSafeEqual } from "crypto";
+import { Type } from "class-transformer";
+import { IsBoolean, IsEmail, IsIn, IsISO8601, IsOptional, IsString, Length, Matches, MaxLength, ValidateIf, ValidateNested, IsUrl } from "class-validator";
+import { Appointment, AppointmentModality, AppointmentSource, AppointmentStatus, ClientType, Psychologist } from "@prisma/client";
+import { randomUUID, timingSafeEqual } from "crypto";
+import { ACTIVE_APPOINTMENT, CareService, parseBirthDate } from "../care/care.service";
+import { cleanText } from "../common/text";
 import { config } from "../config";
 import { Public } from "../common/auth.decorators";
 import { BookingEmailData, cancellationEmail, confirmationEmail } from "../notify/booking-email";
@@ -37,6 +40,26 @@ export class CrmActionDto {
   @IsOptional() @IsBoolean() notify?: boolean;
 }
 
+// Persona de una cita creada desde el CRM. Solo el nombre es obligatorio: lo demás se completa después en el expediente.
+class CrmPersonDto {
+  @IsString() @Length(3, 120, { message: "Escribe el nombre completo" }) fullName: string;
+  @IsOptional() @ValidateIf((_o, v) => v !== "") @IsEmail({}, { message: "El correo no es válido" }) email?: string;
+  @IsOptional() @ValidateIf((_o, v) => v !== "") @Matches(/^\+?[0-9 ()-]{7,20}$/, { message: "Escribe un teléfono válido" }) phone?: string;
+  @IsOptional() @ValidateIf((_o, v) => v !== "") @Matches(/^[A-Za-z0-9.\- ]{4,30}$/, { message: "Escribe una cédula válida" }) idNumber?: string;
+  @IsOptional() @ValidateIf((_o, v) => v !== "") @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: "La fecha de nacimiento debe ser AAAA-MM-DD" }) birthDate?: string;
+}
+
+// Cita creada a mano desde el CRM (por teléfono, WhatsApp, en persona…).
+export class CrmCreateDto extends CrmPersonDto {
+  @IsISO8601({ strict: true }) startsAt: string;
+  // Fuera del horario de atención: se permite siempre que no choque con otra cita.
+  @IsOptional() @IsBoolean() force?: boolean;
+  @IsOptional() @IsIn(["VIDEO", "IN_PERSON"]) modality?: "VIDEO" | "IN_PERSON";
+  @IsOptional() @IsIn(["INDIVIDUAL", "COUPLE", "CHILD"]) clientType?: "INDIVIDUAL" | "COUPLE" | "CHILD";
+  @IsOptional() @IsString() @MaxLength(500) reason?: string;
+  @ValidateIf((o) => o.clientType === "COUPLE") @ValidateNested() @Type(() => CrmPersonDto) partner?: CrmPersonDto;
+}
+
 // API para el CRM (crmespacio). Solo con la llave de servicio (x-api-key = CRM_API_KEY); sin llave configurada, queda apagada.
 // Es la misma lógica que usa el panel de Florece: el CRM solo cambia la pantalla.
 @Controller("crm")
@@ -46,6 +69,7 @@ export class CrmAgendaController {
     private readonly prisma: PrismaService,
     private readonly psy: PsyService,
     private readonly mail: MailService,
+    private readonly care: CareService,
   ) {}
 
   private guard(key: string | undefined) {
@@ -197,6 +221,65 @@ export class CrmAgendaController {
     const message = cancellationEmail(this.emailData(a, p), reason);
     const ok = await this.mail.send({ to, replyTo: config.mail.notifyTo[0] || config.mail.from, ...message });
     return ok ? ("enviado" as const) : ("error" as const);
+  }
+
+  // Horas libres de los próximos días, para elegir al crear una cita a mano.
+  @Get("slots")
+  async slots(@Headers("x-api-key") key: string | undefined, @Query("from") from?: string, @Query("days") days?: string) {
+    this.guard(key);
+    const owner = await this.owner();
+    const start = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : new Date().toISOString().slice(0, 10);
+    const count = Math.min(14, Math.max(1, Number(days) || 1));
+    return { timezone: owner.timezone, sessionMinutes: owner.sessionMinutes, days: await this.care.computeSlots(owner, start, count) };
+  }
+
+  // Crear una cita desde el CRM. Queda «solicitada»; se confirma con PATCH (o el CRM la confirma de una vez).
+  @Post("agenda")
+  async create(@Headers("x-api-key") key: string | undefined, @Body() dto: CrmCreateDto) {
+    this.guard(key);
+    const owner = await this.owner();
+    const startsAt = new Date(dto.startsAt);
+    if (startsAt.getTime() < Date.now() - 60 * 60 * 1000) throw new BadRequestException("La fecha de la cita ya pasó");
+
+    const clientType = (dto.clientType ?? "INDIVIDUAL") as ClientType;
+    const partner = clientType === "COUPLE" ? dto.partner : undefined;
+    if (clientType === "COUPLE" && !partner) throw new BadRequestException("Escribe los datos de la pareja");
+    const birth = (v?: string) => (v ? parseBirthDate(v) : null);
+
+    const data = {
+      patientId: null,
+      modality: dto.modality === "IN_PERSON" ? AppointmentModality.IN_PERSON : AppointmentModality.VIDEO,
+      source: AppointmentSource.WEB,
+      notesForPsychologist: cleanText(dto.reason ?? "", true) || "Cita creada desde el CRM",
+      patientFullName: cleanText(dto.fullName),
+      patientIdNumber: dto.idNumber ? dto.idNumber.toUpperCase() : null,
+      patientBirthDate: birth(dto.birthDate),
+      guestEmail: dto.email ? dto.email.trim().toLowerCase() : null,
+      guestPhone: dto.phone?.trim() || null,
+      clientType,
+      partnerFullName: partner ? cleanText(partner.fullName) : null,
+      partnerIdNumber: partner?.idNumber ? partner.idNumber.toUpperCase() : null,
+      partnerBirthDate: birth(partner?.birthDate),
+      partnerEmail: partner?.email ? partner.email.trim().toLowerCase() : null,
+      partnerPhone: partner?.phone?.trim() || null,
+      crmGroupId: partner ? randomUUID() : null,
+    };
+
+    let created: Appointment;
+    if (!dto.force) {
+      // Solo horas libres del horario de atención (igual que la agenda pública)
+      created = await this.care.reserveSlot(owner, startsAt, data);
+    } else {
+      const endsAt = new Date(startsAt.getTime() + owner.sessionMinutes * 60_000);
+      const overlap = await this.prisma.appointment.findFirst({
+        where: { psychologistId: owner.id, status: { in: ACTIVE_APPOINTMENT }, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
+      });
+      if (overlap) throw new ConflictException("Ya hay una cita en ese horario");
+      created = await this.prisma.appointment.create({
+        data: { ...data, psychologistId: owner.id, startsAt, endsAt, status: AppointmentStatus.REQUESTED, priceCents: owner.sessionPriceCents, currency: owner.currency },
+      });
+    }
+    return { appointment: this.item(created, owner.timezone) };
   }
 
   // ─── Ajustes: perfil, horarios y bloqueos ─────────────
