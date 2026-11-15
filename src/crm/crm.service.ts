@@ -70,6 +70,39 @@ export class CrmService {
     return result;
   }
 
+  /**
+   * Al solicitarse una cita desde la web: registra a la persona en el CRM y crea el cobro (sin pagar).
+   * Espera un máximo de `limitMs` para no demorar la respuesta a quien reserva; si no termina, la cita
+   * queda con el aviso de sincronización y se completa al confirmarla (todo es idempotente).
+   */
+  async syncRequested(appointmentIds: string[], limitMs = 9_000): Promise<void> {
+    const work = (async () => {
+      const [first, ...rest] = appointmentIds;
+      if (!first) return;
+      // La primera registra al cliente; las demás (serie) ya lo encuentran y solo agregan su cobro
+      await this.syncAppointment(first);
+      await Promise.allSettled(rest.map((id) => this.syncAppointment(id)));
+    })().catch((e) => this.logger.error("CRM: fallo al sincronizar citas solicitadas", e as Error));
+    await Promise.race([work, new Promise<void>((r) => setTimeout(r, limitMs))]);
+  }
+
+  /** Cuando una cita se cancela, el CRM quita su cobro si todavía no se pagó. Nunca lanza. */
+  async cancelCharge(appointmentId: string): Promise<void> {
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (config.crm.apiKey) headers["x-api-key"] = config.crm.apiKey;
+      const response = await fetch(`${config.crm.apiUrl}/cobros/cita/cancelar`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ cita_ref: appointmentId }),
+        signal: AbortSignal.timeout(6_000),
+      });
+      if (!response.ok) this.logger.warn(`CRM: no se pudo quitar el cobro de la cita ${appointmentId} (${response.status})`);
+    } catch (e) {
+      this.logger.warn(`CRM: no se pudo quitar el cobro de la cita ${appointmentId}: ${(e as Error).message}`);
+    }
+  }
+
   private people(a: Appointment): Person[] {
     const people: Person[] = [
       { label: "la persona 1", fullName: a.patientFullName, idNumber: a.patientIdNumber, birthDate: a.patientBirthDate, email: a.guestEmail, phone: a.guestPhone },

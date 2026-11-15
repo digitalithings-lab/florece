@@ -561,6 +561,9 @@ export class PsyService {
 
     // Al confirmar (o al reintentar), la persona o la pareja se registra como cliente en el CRM.
     // Si el CRM falla, la cita queda confirmada igual y el panel muestra el aviso con «Reintentar».
+    // Una cita cancelada ya no se cobra: el CRM quita su cobro si todavía no estaba pagado.
+    if (dto.action === "cancel") await this.crm.cancelCharge(appointment.id);
+
     if (dto.action === "confirm" || dto.action === "crm_sync") {
       await this.crm.syncAppointment(appointment.id);
       updated = await this.prisma.appointment.findUniqueOrThrow({

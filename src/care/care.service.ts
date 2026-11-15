@@ -14,6 +14,7 @@ import { DateTime } from "luxon";
 import { normalizeLinkCode } from "../common/link-code";
 import { BusyRange, freeSlots, todayIn } from "../common/schedule";
 import { config } from "../config";
+import { CrmService } from "../crm/crm.service";
 import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { BookAppointmentDto } from "./dto/care.dto";
@@ -26,6 +27,7 @@ export class CareService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifier: PsychologistNotifier,
+    private readonly crm: CrmService,
   ) {}
 
   async current(userId: string) {
@@ -185,6 +187,7 @@ export class CareService {
       where: { id: appointment.id },
       data: { status: AppointmentStatus.CANCELLED, cancelledAt: new Date(), cancelReason: "Cancelada por la persona", cancelledBy: AppointmentCanceller.PATIENT },
     });
+    await this.crm.cancelCharge(updated.id);
     return this.formatAppointment(updated);
   }
 

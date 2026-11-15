@@ -7,6 +7,7 @@ import { isoDateIn, todayIn } from "../common/schedule";
 import { BookingEmailData, patientEmail, psychologistEmail } from "../notify/booking-email";
 import { MailService } from "../notify/mail.service";
 import { config } from "../config";
+import { CrmService } from "../crm/crm.service";
 import { PsychologistNotifier } from "../notify/psychologist-notifier.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { PublicBookDto } from "./dto/public-booking.dto";
@@ -37,6 +38,7 @@ export class PublicBookingService {
     private readonly care: CareService,
     private readonly notifier: PsychologistNotifier,
     private readonly mail: MailService,
+    private readonly crm: CrmService,
   ) {}
 
   async info(slug: string, from?: string, days = 21) {
@@ -119,6 +121,8 @@ export class PublicBookingService {
 
     const notifiedBy = await this.notifyPsychologist(psychologist, dto, startsAt);
     const emailed = await this.sendEmails(psychologist, dto, birthDate, [appointment.startsAt]);
+    // La persona y su cobro (sin pagar) quedan en el CRM desde que pide la cita
+    await this.crm.syncRequested([appointment.id]);
 
     return {
       id: appointment.id,
@@ -215,6 +219,7 @@ export class PublicBookingService {
     });
 
     const emailed = await this.sendEmails(psychologist, dto, birthDate, appointments.map((a) => a.startsAt), ruleLabel);
+    await this.crm.syncRequested(appointments.map((a) => a.id));
 
     return {
       recurring: true as const,
