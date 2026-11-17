@@ -85,6 +85,10 @@ export const config = {
     apiUrl: (process.env.CRM_API_URL ?? "https://backendcrmespaciovital.vercel.app/api/clientes").replace(/\/+$/, ""),
     // Llave de servicio: el CRM solo acepta registros de clientes con esta cabecera (x-api-key). Mismo valor que CRM_API_KEY del CRM.
     apiKey: process.env.CRM_API_KEY ?? "",
+    // Cobro que se crea en la billetera del CRM al confirmar una cita, según la modalidad.
+    chargeCurrency: (process.env.CRM_CHARGE_CURRENCY ?? "USD").toUpperCase(),
+    priceVirtual: Number(process.env.CRM_PRICE_VIRTUAL ?? 40),
+    priceInPerson: Number(process.env.CRM_PRICE_IN_PERSON ?? 50),
   },
   // CAPTCHA (Cloudflare Turnstile) de la agenda pública. Sin TURNSTILE_SECRET no se exige.
   turnstileSecret: process.env.TURNSTILE_SECRET ?? "",

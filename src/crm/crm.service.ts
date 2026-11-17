@@ -174,14 +174,16 @@ export class CrmService {
   // Crea en la billetera del CRM el cobro de la cita (precio de la sesión). Es idempotente por cita.
   // Si el pago ya se hizo en Florece (paymentRef), el cobro entra como pagado.
   private async registerCharge(a: Appointment, headers: Record<string, string>): Promise<CrmResult> {
-    if (a.priceCents <= 0 || !a.patientIdNumber) return { synced: true, error: null };
+    if (!a.patientIdNumber) return { synced: true, error: null };
     const when = a.startsAt.toLocaleDateString("es", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
+    // Virtual: 40 USD. Presencial: 50 USD (configurables con CRM_PRICE_VIRTUAL / CRM_PRICE_IN_PERSON).
+    const inPerson = a.modality === "IN_PERSON";
     const body = {
       cedula: a.patientIdNumber,
       cita_ref: a.id,
-      concepto: `Sesión de terapia · ${when}`,
-      monto: a.priceCents / 100,
-      moneda: a.currency,
+      concepto: `Sesión de terapia (${inPerson ? "presencial" : "virtual"}) · ${when}`,
+      monto: inPerson ? config.crm.priceInPerson : config.crm.priceVirtual,
+      moneda: config.crm.chargeCurrency,
       fecha_servicio: a.startsAt.toISOString(),
       pagado: !!a.paymentRef,
       metodo: a.paymentRef ? "Tarjeta (Stripe)" : undefined,
