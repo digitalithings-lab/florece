@@ -1,3 +1,4 @@
+import { APPOINTMENT_FIELDS } from "../common/field-crypto";
 import {
   BadRequestException, Body, ConflictException, Controller, Delete, Get, Headers, NotFoundException, Param, ParseUUIDPipe, Patch, Post, Put, Query,
   ServiceUnavailableException, UnauthorizedException,
@@ -395,5 +396,30 @@ export class CrmAgendaController {
     const p = await this.owner();
     await this.psy.removeBlock(p.userId, id);
     return this.settings(p);
+  }
+
+  // Cifra las citas anteriores que aún están en texto plano (las nuevas ya se cifran solas). Se puede llamar varias veces:
+  // trabaja en lotes dentro de un tiempo límite y responde cuántas faltan.
+  @Post("seguridad/cifrar")
+  async encryptExisting(@Headers("x-api-key") key: string | undefined) {
+    this.guard(key);
+    const columns = ["patient_full_name", "patient_id_number", "guest_email", "guest_phone", "partner_full_name", "partner_id_number", "partner_email", "partner_phone", "notes_for_psychologist", "cancel_reason"];
+    const pending = columns.map((c) => `(${c} is not null and ${c} <> '' and ${c} not like 'enc1:%')`).join(" or ");
+    const started = Date.now();
+    let encrypted = 0;
+    while (Date.now() - started < 7_000) {
+      const rows = await this.prisma.$queryRawUnsafe<{ id: string }[]>(`select id from appointments where ${pending} limit 50`);
+      if (!rows.length) return { encrypted, pending: 0 };
+      for (const r of rows) {
+        const a = (await this.prisma.appointment.findUnique({ where: { id: r.id } })) as Record<string, any> | null;
+        if (!a) continue;
+        const data: Record<string, string> = {};
+        for (const f of Object.keys(APPOINTMENT_FIELDS)) if (a[f]) data[f] = a[f];
+        await this.prisma.appointment.update({ where: { id: r.id }, data });
+        encrypted++;
+      }
+    }
+    const left = await this.prisma.$queryRawUnsafe<{ n: bigint }[]>(`select count(*) as n from appointments where ${pending}`);
+    return { encrypted, pending: Number(left[0]?.n ?? 0) };
   }
 }
